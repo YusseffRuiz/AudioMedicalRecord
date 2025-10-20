@@ -61,7 +61,7 @@ class ClinicalFormFiller:
     # Nota: se prioriza robustez/legibilidad; ajusta a tus frases reales luego.
     _re_edad = re.compile(r"\b(?:edad\s*[:\-]?\s*)?(\d{1,3})\s*(?:años?|año)\b", re.I)
     _re_peso = re.compile(r"\b(?:peso\s*[:\-]?\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:kg|kilogramos?)\b", re.I)
-    _re_talla_m = re.compile(r"\b(?:(talla|altura|estatura)\s*[:\-]?\s*)?(\d(?:[.,]\d{1,2})?)\s*m\b", re.I)
+    _re_talla_m = re.compile(r"(?:(talla|altura|estatura)*[:\-]?\s*)?(\d(?:[.,]\d{1,2})?)\s*m", re.I)
     _re_talla_cm = re.compile(r"\b(?:talla\s*[:\-]?\s*)?(\d{2,3})\s*cm\b", re.I)
     _re_ta = re.compile(r"\b(?:T/?A|TA|tensión\s*arterial)\s*[:\-]?\s*(\d{2,3})\s*[\/\s]\s*(\d{2,3})\b", re.I)
     _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\s*[:\-]?\s*(\d{2,3})\s*(?:lpm|bpm)?\b", re.I)

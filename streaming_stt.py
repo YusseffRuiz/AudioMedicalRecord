@@ -25,7 +25,7 @@ EXTRACTION_PROMPT = (
     "Eres un extractor clínico estricto en español que tiene que llenar los siguientes campos SIN cambiar el nombre:"
     "- Edad (entero, años)\n"
     "- Peso (float, kg),"
-    "- Talla (reconoce como talla o altura, si escuchas algo como 76 m, probablemente sea 1.76 metros) (float, m),"
+    "- Talla (si escuchas algo como 76 m, probablemente sea 1.76 metros) (float, m),"
     "- Tension Arterial (en forma X,Y) (Si escuchas: 'frecuencia cardiaca' pero el valor lo da como en formato '120 sobre 80, entonces es tension"
     "- Frecuencia Cardiaca (entero)"
     "- Frecuencia Respiratoria (entero)"
