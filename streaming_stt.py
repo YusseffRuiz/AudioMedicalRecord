@@ -80,7 +80,7 @@ def finalize_session_and_save(llm_model, transcript_full: list[str]):
     llm_model.complete_fields(transcript_full, current)
 
     # 3) guardar JSON de historial + transcript
-    print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True)
+    print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True) # Forma ya llenada con el LLM.
 
     out_dir = "_historiales"
     os.makedirs(out_dir, exist_ok=True)
@@ -287,7 +287,6 @@ def main():
     print(str(transcript_local))
     finalize_session_and_save(llm_filler, transcript_local)
     print("Analisis Finalizado")
-    print("\n[ESTADO FINAL] ", clinical_filler.preview_text())
 
 
 def prueba_llm():
@@ -300,7 +299,6 @@ def prueba_llm():
     print(str(TRANSCRIPT_LOG))
     finalize_session_and_save(llm_filler, TRANSCRIPT_LOG)
     print("Analisis Finalizado")
-    print("\n[ESTADO FINAL] ", clinical_filler.preview_text())
 
 
 if __name__ == "__main__":

@@ -167,12 +167,12 @@ class FieldCompleterEngine:
             if error_cnt >= 10:
                 success = True
                 print("LLM Failed")
-        print("Respuesta LLM: ")
-        print(raw)
-        print("#################")
+        # Habilitar para debugging
+        # print("Respuesta LLM: ")
+        # print(raw)
+        # print("#################")
         lines = raw.strip().splitlines()
         for line in lines:
-            print(line)
             self.medical_filler.update(line)
 
     def complete_fields(self, transcript: str, current_state: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
