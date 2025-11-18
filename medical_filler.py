@@ -4,31 +4,6 @@ from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Tuple, List
 import re
 
-REQUIRED_MEDICAL_FIELDS = {
-    "edad",
-    "peso",
-    "talla",
-    "imc",
-    "ta",
-    "tam",
-    "fc",
-    "fr",
-    "spo2"
-    "temperatura",
-    "glucosa",
-    "alergias",
-    "diagnostico",
-    "receta",
-
-}
-
-def _norm_num(s: str) -> float:
-    # Permite decimales con coma o punto
-    s = s.replace(",", ".")
-    try:
-        return float(s)
-    except Exception:
-        return float("nan")
 
 @dataclass
 class ClinicalFields:
@@ -61,14 +36,39 @@ class ClinicalFormFiller:
     # Nota: se prioriza robustez/legibilidad; ajusta a tus frases reales luego.
     _re_edad = re.compile(r"\b(?:edad\s*[:\-]?\s*)?(\d{1,3})\s*(?:años?|año)\b", re.I)
     _re_peso = re.compile(r"\b(?:peso\s*[:\-]?\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:kg|kilogramos?)\b", re.I)
-    _re_talla_m = re.compile(r"(?:(talla|altura|estatura)*[:\-]?\s*)?(\d(?:[.,]\d{1,2})?)\s*m", re.I)
-    _re_talla_cm = re.compile(r"\b(?:talla\s*[:\-]?\s*)?(\d{2,3})\s*cm\b", re.I)
-    _re_ta = re.compile(r"\b(?:T/?A|TA|tensión\s*arterial)\s*[:\-]?\s*(\d{2,3})\s*[\/\s]\s*(\d{2,3})\b", re.I)
-    _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\s*[:\-]?\s*(\d{2,3})\s*(?:lpm|bpm)?\b", re.I)
-    _re_fr = re.compile(r"\b(?:FR|frecuencia\s*respiratoria)\s*[:\-]?\s*(\d{1,2})\s*(?:rpm)?\b", re.I)
-    _re_spo2 = re.compile(r"\b(?:SpO2|saturaci(?:o|ó)n)\s*[:\-]?\s*(\d{2,3})\s*%\b", re.I)
-    _re_temp = re.compile(r"\b(?:temp|temperatura)\s*[:\-]?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:°?\s*C|°?C|C)?\b", re.I)
-    _re_gluc = re.compile(r"\b(?:gluc(?:osa)?)\s*[:\-]?\s*(\d{1,3}(?:[.,]\d)?)\s*(?:mg/?dL|mgdL)?\b", re.I)
+    _re_talla_m = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*(m|metros|mt)\b",re.I)
+    _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*cm\b",re.I)
+    _re_ta = re.compile(
+        r"\b(?:T/?A|TA|tensión\s*arterial)?\s*"  # 
+        r"(?:[:\-]?\s*)?"  # separador 
+        r"(?:es\s+de\s+|de\s+|en\s+)?"  # conector opcional: es de / de / en
+        r"(\d{2,3})\s*"  # sistólica
+        r"(?:[/\s]|sobre)\s*"  # separador: /, espacio o 'sobre'
+        r"(\d{2,3})\b",  # diastólica
+        re.I
+    )
+    _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
+    re.I)
+    _re_fr = re.compile(r"\b(?:FR|frecuencia\s*respiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
+    re.I)
+    _re_spo2 = re.compile(
+        r"\b(?:SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
+        r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
+        r"(?:[:\-]?\s*)?"  # separador opcional
+        r"(\d{2,3})\s*"  # valor 2–3 dígitos
+        r"(?:%|por\s*ciento)?\b",  # % o 'por ciento'
+        re.I
+    )
+    _re_temp = re.compile(
+        r"\b(?:temp(?:eratura)?(?:\s*corporal)?)\s*"  # temp / temperatura / temperatura corporal
+        r"(?:[:\-|]?\s*)?"  # separador
+        r"(\d{2,3}(?:[.,]\d+)?)\s*"  # número 2–3 dígitos + opcional decimal
+        r"(?:°\s*)?"  # símbolo ° opcional
+        r"(?:C|cent(?:í|i)grados?|centigrados)?\b",  # C / centígrados / centigrados (opc.)
+        re.I
+    )
+    _re_gluc = re.compile(r"\b(?:gluc(?:osa)?|glucemia)\s*(?:[:\-]?\s*)?(?:es\s+de\s+|de\s+|en\s+)?(\d{1,3}(?:[.,]\d+)?)\s*(?:mg/?dL|mgdL)?\b",
+    re.I)
     _re_alerg_none = re.compile(r"\b(no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
     _re_alerg = re.compile(r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*([A-Za-zÁÉÍÓÚÑÜáéíóúñ0-9 ,\-]+)", re.I)
 
@@ -92,7 +92,7 @@ class ClinicalFormFiller:
         # PESO
         m = self._re_peso.search(s)
         if m:
-            kg = _norm_num(m.group(1))
+            kg = float(m.group(1))
             if 1 <= kg <= 400 and self.state.peso_kg != kg:
                 self.state.peso_kg = kg
                 changed["peso_kg"] = kg
@@ -101,11 +101,11 @@ class ClinicalFormFiller:
         m = self._re_talla_m.search(s)
         talla_m = None
         if m:
-            talla_m = _norm_num(m.group(1))
+            talla_m = float(m.group("val"))
         else:
             m = self._re_talla_cm.search(s)
             if m:
-                cm = _norm_num(m.group(1))
+                cm = float(m.group("val"))
                 talla_m = cm / 100.0
 
         if talla_m and 0.5 <= talla_m <= 2.5 and self.state.talla_m != talla_m:
@@ -163,7 +163,8 @@ class ClinicalFormFiller:
         # Temperatura
         m = self._re_temp.search(s)
         if m:
-            temp = _norm_num(m.group(1))
+            temp = float(m.group(1))
+            print("Temp: ", temp)
             # Filtra valores plausibles humanos
             if 30.0 <= temp <= 45.0 and self.state.temp_c != temp:
                 self.state.temp_c = temp
@@ -172,7 +173,7 @@ class ClinicalFormFiller:
         # Glucosa
         m = self._re_gluc.search(s)
         if m:
-            gluc = _norm_num(m.group(1))
+            gluc = int(m.group(1))
             if 20.0 <= gluc <= 600.0 and self.state.gluc_mgdl != gluc:
                 self.state.gluc_mgdl = gluc
                 changed["gluc_mgdl"] = gluc

@@ -2,7 +2,7 @@
 # - Separa el transcript en chunks ~800 tokens (configurable).
 # - Envía cada chunk a un LLM con un prompt de extracción JSON estricto.
 # - Valida rangos y fusiona resultados.
-
+import os
 from typing import Callable, Dict, Any, List, Tuple
 import tiktoken
 import torch
@@ -15,6 +15,24 @@ REQUIRED_FIELDS = [
     # Posterior al llenado de signos, el flujo incluye:
     "diagnostico", "receta"
 ]
+
+FIELD_META = {
+    "edad":       {"label": "Edad (años)"},
+    "peso_kg":    {"label": "Peso (kg)"},
+    "talla_m":    {"label": "Talla (m)"},
+    "imc":        {"label": "IMC"},
+    "ta_sis":     {"label": "Tensión arterial sistólica (mmHg)"},
+    "ta_dia":     {"label": "Tensión arterial diastólica (mmHg)"},
+    "tam_map":    {"label": "Tensión arterial media (TAM, mmHg)"},
+    "fc_lpm":     {"label": "Frecuencia cardíaca (lpm)"},
+    "fr_rpm":     {"label": "Frecuencia respiratoria (rpm)"},
+    "spo2_pct":   {"label": "SpO₂ (%)"},
+    "temp_c":     {"label": "Temperatura (°C)"},
+    "gluc_mgdl":  {"label": "Glucosa (mg/dL)"},
+    "alergias":   {"label": "Alergias"},
+    "diagnostico":{"label": "Diagnóstico"},
+    "receta":     {"label": "Receta"},
+}
 
 RANGES = {
     "edad": (0, 120),
@@ -82,22 +100,35 @@ class FieldCompleterEngine:
                  model_name,
                  max_tokens_per_chunk: int = 800,
                  overlap_tokens: int = 50,
-                 medical_filler = None):
+                 medical_filler = None,
+                 device="cuda" if torch.cuda.is_available() else "cpu"):
         self.max_tokens = max_tokens_per_chunk
         self.overlap_tokens = overlap_tokens
         self.initial_prompt = None
         self.medical_filler = medical_filler
 
+
         # Verificar GPU
-        print("CUDA available:", torch.cuda.is_available())
+        cuda_available = torch.cuda.is_available()
+        print("CUDA available:", cuda_available)
 
         print("Initializing Model ...")
-        config = {'max_new_tokens': 256, 'context_length': 1700, 'temperature': 0.35} # Modificar de ser necesario.
+        gpu_layers = 0
+        if cuda_available:
+            gpu_layers = 16
+            config = {'max_new_tokens': 256, 'context_length': 1100, 'temperature': 0.35, "gpu_layers": gpu_layers,
+                      "threads": os.cpu_count()}
+        else:
+            config = {'max_new_tokens': 256, 'context_length': 1100, 'temperature': 0.35}
+
 
         self.llm_model = CTransformers(
             model=model_name,
+            model_type="llama",
             config=config,
-            verbose=True,
+            verbose=False,
+            device=device,
+            gpu_layers=gpu_layers,
         )
         print("Module Created!")
 
@@ -126,9 +157,19 @@ class FieldCompleterEngine:
 
     def _extract_from_chunk(self, chunk_text_str: str):
         prompt = self.build_llama2_prompt(chunk_text_str)
-        raw = self.llm_model.invoke(prompt)
+        error_cnt = 0
+        success = False
+        while not success:
+            raw = self.llm_model.invoke(prompt)
+            error_cnt += 1
+            if raw is not None:
+                success = True
+            if error_cnt >= 10:
+                success = True
+                print("LLM Failed")
+        print("Respuesta LLM: ")
         print(raw)
-        # tomar solo la primera línea JSON
+        print("#################")
         lines = raw.strip().splitlines()
         for line in lines:
             print(line)

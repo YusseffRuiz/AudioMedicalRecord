@@ -1,6 +1,5 @@
-from typing import List, Dict, Tuple
+from typing import Tuple
 import whisper
-import numpy as np
 
 
 # Patrones clínicos mínimos de ejemplo (puedes ampliarlos luego)
