@@ -1,4 +1,4 @@
-📄 **README — Sistema de Captura Clínica con STT + LLM + Regex**
+## 📄 **README — Sistema de Captura Clínica con STT + LLM + Regex**
 
 Este proyecto implementa un módulo híbrido de captura automática de datos clínicos, pensado para integrarse con un sistema de historial clínico en una página web.
 El objetivo es automatizar la obtención de datos a partir de dictado médico en español, usando:
@@ -13,7 +13,7 @@ Extracción clínica robusta con regex médicas + validación de rangos
 
 Construcción final de un JSON clínico listo para autollenado
 
-🚀 Arquitectura General
+## 🚀 Arquitectura General
 
 **1. Captura de Audio**
 
@@ -128,7 +128,7 @@ Lo generamos nosotros con el extractor de regex.
 El médico debe llenar esos campos manualmente.
 
 
-**🧪 Flujos disponibles**
+## **🧪 Flujos disponibles**
 
 1. A. Live Streaming
    1. Push-to-talk con ENTER
@@ -180,12 +180,13 @@ Ejemplo:
       }
     }
 
-**Próximos pasos:**
+## **Próximos pasos:**
 
 * Afinar prompt del LLM con ejemplos reales
 * Integrar con navegador (autollenado con Selenium/Playwright/Extension)
 * Probar con médicos reales
 * Ajustar regex según estilo de dictado real
+
 
 **🙋 ¿Dudas o contribuciones?**
 
@@ -200,3 +201,4 @@ Alertas clínicas
 Diagnóstico asistido
 
 Si vas a contribuir, revisa primero el flujo del streaming y el ClinicalFormFiller, ya que son los módulos más importantes.
+

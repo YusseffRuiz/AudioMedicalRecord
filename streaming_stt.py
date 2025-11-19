@@ -251,7 +251,8 @@ def transcribe_full_session(asr_engine, wav_path: str) -> str:
 def main():
     print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
     asr = AsrEngine(model_size=MODEL_SIZE, device="cuda")
-    value = input("Modelo Listo. \n Escribe [1] si vas a grabar la sesion completa. \n Escribe [2] si va a ser live streaming").strip()
+    # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
+    value = 2
     transcript_local = None
     if value == "1":
         print("Comienza el streaming… (Ctrl+C para salir, máx 2 min)")
@@ -276,16 +277,18 @@ def main():
             print("\n\n[FIN] Streaming detenido.")
             transcript_local = TRANSCRIPT_LOG
     else:
-        wav_path = record_full_session(rec_duration_sec=15 * 60)  # ajusta duración
+        wav_path = "Audios/Grabacion_Prueba_3min.m4a"
+        print(os.path.exists(wav_path))
+        # wav_path = record_full_session(rec_duration_sec=15 * 60)  # ajusta duración
         transcript_local = transcribe_full_session(asr, wav_path)
 
     print("Inicializando analisis via LLM")
     llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
-    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=600)
-    llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+    # llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=600)
+    # llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
     print("Texto a transcribir:")
     print(str(transcript_local))
-    finalize_session_and_save(llm_filler, transcript_local)
+    # finalize_session_and_save(llm_filler, transcript_local)
     print("Analisis Finalizado")
 
 
@@ -302,5 +305,5 @@ def prueba_llm():
 
 
 if __name__ == "__main__":
-    # main()
-    prueba_llm()
+    main()
+    # prueba_llm()

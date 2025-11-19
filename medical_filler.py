@@ -240,3 +240,6 @@ class ClinicalFormFiller:
             payload["extras"] = extras
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    def reset_state(self):\
+        self.state = ClinicalFields()

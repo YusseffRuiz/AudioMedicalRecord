@@ -11,7 +11,7 @@ MED_PATTERNS = [
 
 
 class AsrEngine:
-    def __init__(self, model_size: str = "small", device: str = "cpu") -> None:
+    def __init__(self, model_size: str = "small", device: str = "cuda") -> None:
         """
         model_size: "tiny" | "base" | "small" | "medium" | "large-v3"
         device: "cpu" | "cuda"
@@ -24,12 +24,14 @@ class AsrEngine:
                         ) -> Tuple[str, float, dict]:
 
         # audio es un array
+        print(audio)
         result = self.model.transcribe(
             audio,
             language=language,
             fp16=fp16,
             without_timestamps=without_timestamps,
         )
+        print(result)
 
         text = result.get("text", "")
         confidence = 0.90 if text else 0.0 # placeholder; faster-whisper no expone prob estable
