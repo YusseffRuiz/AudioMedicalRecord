@@ -1,7 +1,7 @@
 import datetime
 import json
 from dataclasses import dataclass, asdict
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Dict
 import re
 
 
@@ -243,3 +243,13 @@ class ClinicalFormFiller:
 
     def reset_state(self):\
         self.state = ClinicalFields()
+
+    def extract_with_regex(self, text: str) -> dict:
+        # 1) procesar línea por línea (útil si el texto viene pseudo-estructurado)
+        for line in text.splitlines():
+            self.update(line)
+
+        # 2) pasada global
+        self.update(text)
+
+        return self.snapshot()

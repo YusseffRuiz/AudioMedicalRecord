@@ -3,9 +3,9 @@
 # - Envía cada chunk a un LLM con un prompt de extracción JSON estricto.
 # - Valida rangos y fusiona resultados.
 import os
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 import tiktoken
-import torch
+# import torch
 from langchain_community.llms.ctransformers import CTransformers
 
 # ---------------- Configuración de campos y rangos plausibles ----------------
@@ -101,7 +101,8 @@ class FieldCompleterEngine:
                  max_tokens_per_chunk: int = 800,
                  overlap_tokens: int = 50,
                  medical_filler = None,
-                 device="cuda" if torch.cuda.is_available() else "cpu"):
+                 # device="cuda" if torch.cuda.is_available() else "cpu"):
+                 device="cpu"):
         self.max_tokens = max_tokens_per_chunk
         self.overlap_tokens = overlap_tokens
         self.initial_prompt = None
@@ -109,26 +110,26 @@ class FieldCompleterEngine:
 
 
         # Verificar GPU
-        cuda_available = torch.cuda.is_available()
+        # cuda_available = torch.cuda.is_available()
+        cuda_available = False
         print("CUDA available:", cuda_available)
 
         print("Initializing Model ...")
         gpu_layers = 0
         if cuda_available:
             gpu_layers = 16
-            config = {'max_new_tokens': 256, 'context_length': 1100, 'temperature': 0.35, "gpu_layers": gpu_layers,
+            config = {'max_new_tokens': 160, 'context_length': 1250, 'temperature': 0.35, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
         else:
-            config = {'max_new_tokens': 256, 'context_length': 1100, 'temperature': 0.35}
+            config = {'max_new_tokens': 160, 'context_length': 1250, 'temperature': 0.35, "threads": os.cpu_count()}
 
 
+        # self.llm_model = None
         self.llm_model = CTransformers(
             model=model_name,
             model_type="llama",
             config=config,
             verbose=False,
-            device=device,
-            gpu_layers=gpu_layers,
         )
         print("Module Created!")
 
@@ -140,9 +141,7 @@ class FieldCompleterEngine:
         return (
             f"[INST] <<SYS>>\n{self.initial_prompt}\n<</SYS>>\n\n"
             f"# CONTEXTO\n{context}\n\n"
-            f"# PREGUNTA\n{'Extrae los campos desde el contexto'
-                           'Si no hay ninguno, devuelve {}.'}\n"
-            "[/INST]"
+            "# PREGUNTA\nExtrae los campos desde el contexto. Si no hay ninguno, devuelve {{}}.\n[/INST]"
         )
 
     @staticmethod
@@ -157,14 +156,20 @@ class FieldCompleterEngine:
 
     def _extract_from_chunk(self, chunk_text_str: str):
         prompt = self.build_llama2_prompt(chunk_text_str)
+        # print("Tokens context: ", count_tokens(chunk_text_str))
+        # print("Tokens prompt: ", count_tokens(prompt))
         error_cnt = 0
         success = False
+        raw = None
         while not success:
-            raw = self.llm_model.invoke(prompt)
-            error_cnt += 1
+            try:
+                raw = self.llm_model.invoke(prompt)
+            except Exception as e:
+                print("[LLM ERROR]", repr(e))
+                error_cnt += 1
             if raw is not None:
                 success = True
-            if error_cnt >= 10:
+            if error_cnt >= 5:
                 success = True
                 print("LLM Failed")
         # Habilitar para debugging
@@ -175,18 +180,27 @@ class FieldCompleterEngine:
         for line in lines:
             self.medical_filler.update(line)
 
-    def complete_fields(self, transcript: str, current_state: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    def complete_fields(self, transcript: str, current_state: Dict[str, Any]):
         """
         Devuelve (updates, missing_after):
         - updates: dict con nuevos campos válidos a aplicar sobre current_state
         - missing_after: lista de keys que siguieron faltando tras LLM
         """
         # Determinar faltantes iniciales
-        missing = [k for k in REQUIRED_FIELDS if current_state.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}]
+        missing = compute_missing(current_state)
         if not missing:
             return {}, []
 
         chunks = chunk_text(transcript, max_tokens=self.max_tokens, overlap_tokens=self.overlap_tokens)
-
         for ch in chunks:
             self._extract_from_chunk(ch)
+
+def compute_missing(fields: dict) -> list[str]:
+    """
+    Calcula qué campos siguen vacíos después de una pasada de regex.
+    Excluimos campos derivados como imc y tam_map.
+    """
+    return [
+        k for k in REQUIRED_FIELDS
+        if fields.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}
+    ]
