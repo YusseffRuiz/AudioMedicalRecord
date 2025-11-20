@@ -39,20 +39,20 @@ class ClinicalFormFiller:
     _re_talla_m = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*(m|metros|mt)\b",re.I)
     _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*cm\b",re.I)
     _re_ta = re.compile(
-        r"\b(?:T/?A|TA|tensión\s*arterial)?\s*"  # 
+        r"\b(?:T/?A|TA|[tT]ensión\s*[aA]rterial)?\s*"  # 
         r"(?:[:\-]?\s*)?"  # separador 
         r"(?:es\s+de\s+|de\s+|en\s+)?"  # conector opcional: es de / de / en
         r"(\d{2,3})\s*"  # sistólica
-        r"(?:[/\s]|sobre)\s*"  # separador: /, espacio o 'sobre'
+        r"(?:[/\s-]|sobre)\s*"  # separador: /, espacio o 'sobre'
         r"(\d{2,3})\b",  # diastólica
         re.I
     )
-    _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
+    _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card[ií]aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
     re.I)
     _re_fr = re.compile(r"\b(?:FR|frecuencia\s*respiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
     re.I)
     _re_spo2 = re.compile(
-        r"\b(?:SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
+        r"\b(?:SpO₂|SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
         r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
         r"(?:[:\-]?\s*)?"  # separador opcional
         r"(\d{2,3})\s*"  # valor 2–3 dígitos
@@ -164,7 +164,6 @@ class ClinicalFormFiller:
         m = self._re_temp.search(s)
         if m:
             temp = float(m.group(1))
-            print("Temp: ", temp)
             # Filtra valores plausibles humanos
             if 30.0 <= temp <= 45.0 and self.state.temp_c != temp:
                 self.state.temp_c = temp

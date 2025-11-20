@@ -11,7 +11,7 @@ from typing import List
 
 from ASREngine import AsrEngine
 from medical_filler import ClinicalFormFiller
-from field_completer_engine import FieldCompleterEngine, REQUIRED_FIELDS, FIELD_META, compute_missing
+from field_completer_engine import FieldCompleterEngine, FIELD_LABELS
 from audio_recording import AudioRecorder
 
 # ======= Configuración =======
@@ -64,23 +64,20 @@ stop_flag = threading.Event()
 # Buffer PCM int16 acumulado (lo mantenemos corto con ventana deslizante)
 pcm_buffer = np.zeros(0, dtype=np.int16)
 buffer_lock = threading.Lock()
-clinical_filler = ClinicalFormFiller()
+# clinical_filler = ClinicalFormFiller()
 
 TRANSCRIPT_LOG: list[str] = []
 
 # Control para no imprimir duplicados
 last_emitted_time = 0.0  # en segundos (según timestamps de whisper)
 
-def finalize_session_and_save(llm_model, transcript_full: list[str]):
-    transcript_full = " ".join(transcript_full)
-    # 1) estado actual por regex
-    current = clinical_filler.snapshot()
+def finalize_session_and_save(llm_model, clinical_filler, transcript_full: list[str]):
+    transcript_full = "".join(transcript_full)
+    fields_final, still_missing_keys = process_transcript_with_regex_and_llm(llm_model, clinical_filler, transcript_full)
 
-    # 2) completar con LLM si faltan campos
-    llm_model.complete_fields(transcript_full, current)
 
     # 3) guardar JSON de historial + transcript
-    print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True) # Forma ya llenada con el LLM.
+    # print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True) # Forma ya llenada con el LLM.
 
     out_dir = "_historiales"
     os.makedirs(out_dir, exist_ok=True)
@@ -90,13 +87,43 @@ def finalize_session_and_save(llm_model, transcript_full: list[str]):
 
     # 4) mensaje de faltantes (si los hay)
 
-    still_missing_keys  = [k for k in REQUIRED_FIELDS if getattr(clinical_filler.state, k, None) in (None, "", 0) and k not in {"imc","tam_map"}]
     if still_missing_keys:
-        missing_labels = [FIELD_META.get(k, {}).get("label", k) for k in still_missing_keys]
+        missing_labels = []
+        seen = set()
+        for key in still_missing_keys:
+            label = FIELD_LABELS.get(key, key)
+            if label not in seen:
+                seen.add(label)
+                missing_labels.append(label)
         print("\n⚠️  Faltan los siguientes campos: ", ", ".join(missing_labels))
         print("Dígalos o escríbalos manualmente, ya que no pude recuperarlos.")
 
     print(f"\n[OK] Historial guardado en: {out_dir}")
+
+def process_transcript_with_regex_and_llm(llm_model, clinical_filler, transcript_full: str) -> tuple[dict, list[str]]:
+    """
+    Devuelve:
+      - fields_final: dict con campos clínicos
+      - missing_final: lista de campos que faltan al final
+      - llm_text: texto bruto que devolvió el LLM (para debug)
+    """
+
+    # --- PASADA 1: REGEX directo ---
+    fields_1 = clinical_filler.extract_with_regex(transcript_full)
+    missing_1 = llm_model.compute_missing(fields_1)
+    # print("Missing after regex: ", missing_1)
+
+    if not missing_1:
+        # No necesitamos LLM
+        return fields_1, []
+
+    # --- PASADA 2: LLM SOLO para campos faltantes ---
+    llm_model.complete_fields(transcript_full, missing_1)
+
+    fields_final = clinical_filler.snapshot()
+    missing_final = llm_model.compute_missing(fields_final)
+
+    return fields_final, missing_final
 
 
 def audio_callback(indata, frames, time, status):
@@ -251,6 +278,7 @@ def transcribe_full_session(asr_engine, wav_path: str) -> str:
 def main():
     print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
     asr = AsrEngine(model_size=MODEL_SIZE, device="cpu")
+    clinical_filler = ClinicalFormFiller()
     # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
     value = 2
     transcript_local = None
@@ -284,14 +312,12 @@ def main():
 
     print("Inicializando analisis via LLM")
     llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
-    current_state = clinical_filler.extract_with_regex(transcript_local)
-    print(current_state)
-    missing_fields = compute_missing(clinical_filler.state)
-    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=400)
-    llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=300)
+    # llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+
     print("Texto a transcribir:")
     print(str(transcript_local))
-    finalize_session_and_save(llm_filler, transcript_local)
+    finalize_session_and_save(llm_filler, clinical_filler, transcript_local)
     print("Analisis Finalizado")
 
 
@@ -299,6 +325,7 @@ def prueba_llm():
     TRANSCRIPT_LOG =[' nuevamente comenzamos una', ' Comenzamos un nuevo modelo para paciente de nombre Adan cuya edad es de 33 años', ' 33 años peso de 83 kilogramos', ' altura es de uno 76 metros', ' Su tension arterial es de 120 sobre 80 y su frecuencia cardíaca es de 80.', 'la glucosa se encuentra en 40 y la temperatura corporea', ' la temperatura corporal en 36.5 grados centígrados su y', ' IMC se encuentra en rango normal de 24 IMC y el oxigen...', ' y el oxígeno en la sangre de 86%.']
     print("Inicializando analisis via LLM")
     llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
+    clinical_filler = ClinicalFormFiller()
     llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=600)
     llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
     print("Texto a transcribir:")

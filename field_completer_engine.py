@@ -10,28 +10,79 @@ from langchain_community.llms.ctransformers import CTransformers
 
 # ---------------- Configuración de campos y rangos plausibles ----------------
 REQUIRED_FIELDS = [
-    "edad", "peso_kg", "talla_m", "imc", "ta_sis", "ta_dia", "tam_map",
+    "edad", "peso_kg", "talla_m", "ta_sis", "ta_dia",
     "fc_lpm", "fr_rpm", "spo2_pct", "temp_c", "gluc_mgdl", "alergias",
     # Posterior al llenado de signos, el flujo incluye:
     "diagnostico", "receta"
 ]
 
 FIELD_META = {
-    "edad":       {"label": "Edad (años)"},
-    "peso_kg":    {"label": "Peso (kg)"},
-    "talla_m":    {"label": "Talla (m)"},
-    "imc":        {"label": "IMC"},
-    "ta_sis":     {"label": "Tensión arterial sistólica (mmHg)"},
-    "ta_dia":     {"label": "Tensión arterial diastólica (mmHg)"},
-    "tam_map":    {"label": "Tensión arterial media (TAM, mmHg)"},
-    "fc_lpm":     {"label": "Frecuencia cardíaca (lpm)"},
-    "fr_rpm":     {"label": "Frecuencia respiratoria (rpm)"},
-    "spo2_pct":   {"label": "SpO₂ (%)"},
-    "temp_c":     {"label": "Temperatura (°C)"},
-    "gluc_mgdl":  {"label": "Glucosa (mg/dL)"},
-    "alergias":   {"label": "Alergias"},
-    "diagnostico":{"label": "Diagnóstico"},
-    "receta":     {"label": "Receta"},
+    "edad":       {
+                    "label": "Edad",
+                    "desc": "edad del paciente en años (entero)",
+                    "example": "La edad del paciente es de 33 años."
+                    },
+    "peso_kg":    {"label": "Peso",
+                    "desc": "peso en kilogramos (float, con punto decimal si hace falta)",
+                    "example": "El peso es de 83.0 kilogramos.",
+                   },
+    "talla_m":    {"label": "Talla",
+                    "desc": "talla/altura en metros (float, por ejemplo 1.76)",
+                    "example": "La talla es de 1.76 metros.",
+                   },
+    "t_a":      {"label": "Tensión arterial",
+                    "desc": "tensión arterial en mmHg (entero en forma X,Y, mmHg)",
+                    "example": "La presión arterial es de 120 sobre 80",
+                  },
+
+    "fc_lpm":     {"label": "Frecuencia cardíaca",
+                    "desc": "frecuencia cardiaca en latidos por minuto (entero)",
+                    "example": "La frecuencia cardiaca es de 80 latidos por minuto.",
+                   },
+    "fr_rpm":     {"label": "Frecuencia respiratoria",
+                    "desc": "frecuencia respiratoria en respiraciones por minuto (entero)",
+                    "example": "La frecuencia respiratoria es de 16 respiraciones por minuto.",
+                   },
+    "spo2_pct":   {"label": "SpO₂",
+                    "desc": "saturación de oxígeno en porcentaje (entero, %)",
+                    "example": "La saturación de oxígeno es de 97%.",
+                   },
+    "temp_c":     {"label": "Temperatura",
+                    "desc": "temperatura corporal en °C (float)",
+                    "example": "La temperatura corporal de 36.7 grados centígrados.",
+                   },
+    "gluc_mgdl":  {"label": "Glucosa",
+                    "desc": "glucosa en sangre en mg/dL (float)",
+                    "example": "La glucosa capilar en ayunas es de 90 miligramos por decilitro.",
+                   },
+    "alergias":   {"label": "Alergias",
+                    "desc": "alergias relevantes en un texto corto",
+                    "example": "Las alergias reportadas son: alergia a penicilina.",
+                   },
+    "diagnostico":{"label": "Diagnóstico",
+                    "desc": "diagnóstico clínico principal en una frase",
+                    "example": "El diagnóstico es cefalea tensional aguda.",
+                   },
+    "receta":     {"label": "Receta",
+                    "desc": "tratamiento o receta indicada en pocas frases",
+                    "example": "La receta indicada es ibuprofeno 400 mg cada 8 horas por 3 días.",
+                   },
+}
+
+FIELD_LABELS = { ## Solo para mostrar en formato humano.
+    "edad": "Edad",
+    "peso_kg": "Peso",
+    "talla_m": "Talla",
+    "ta_sis": "Tensión arterial",
+    "ta_dia": "Tensión arterial",
+    "fc_lpm": "Frecuencia cardiaca",
+    "fr_rpm": "Frecuencia respiratoria",
+    "spo2_pct": "SpO2",
+    "temp_c": "Temperatura",
+    "gluc_mgdl": "Glucosa",
+    "alergias": "Alergias",
+    "diagnostico": "Diagnóstico",
+    "receta": "Receta",
 }
 
 RANGES = {
@@ -109,20 +160,19 @@ class FieldCompleterEngine:
         self.medical_filler = medical_filler
 
 
-        # Verificar GPU
+        # Verificar GPU solo si hay GPU, descomentar.
         # cuda_available = torch.cuda.is_available()
         cuda_available = False
-        print("CUDA available:", cuda_available)
+        # print("CUDA available:", cuda_available)
 
         print("Initializing Model ...")
         gpu_layers = 0
+        config = {'max_new_tokens': 160, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+                  "threads": os.cpu_count()}
         if cuda_available:
             gpu_layers = 16
-            config = {'max_new_tokens': 160, 'context_length': 1250, 'temperature': 0.35, "gpu_layers": gpu_layers,
+            config = {'max_new_tokens': 160, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
-        else:
-            config = {'max_new_tokens': 160, 'context_length': 1250, 'temperature': 0.35, "threads": os.cpu_count()}
-
 
         # self.llm_model = None
         self.llm_model = CTransformers(
@@ -134,10 +184,11 @@ class FieldCompleterEngine:
         print("Module Created!")
 
     def initialize(self, initial_prompt):
+        # Se usa cuando se necesita crear un prompt inicial.
         self.initial_prompt = initial_prompt
 
     def build_llama2_prompt(self, context: str) -> str:
-        # Plantilla oficial LLaMA-2 chat
+        # Plantilla oficial LLaMA-2 chat, uso basico para crear solo un prompt inicial
         return (
             f"[INST] <<SYS>>\n{self.initial_prompt}\n<</SYS>>\n\n"
             f"# CONTEXTO\n{context}\n\n"
@@ -154,8 +205,10 @@ class FieldCompleterEngine:
         return lo <= v <= hi
 
 
-    def _extract_from_chunk(self, chunk_text_str: str):
-        prompt = self.build_llama2_prompt(chunk_text_str)
+    def _extract_from_chunk(self, chunk_text_str: str, missing_fields=None):
+
+        # prompt = self.build_llama2_prompt(chunk_text_str)
+        prompt = self.build_prompt_for_missing_fields(chunk_text_str, missing_fields=missing_fields)
         # print("Tokens context: ", count_tokens(chunk_text_str))
         # print("Tokens prompt: ", count_tokens(prompt))
         error_cnt = 0
@@ -180,27 +233,106 @@ class FieldCompleterEngine:
         for line in lines:
             self.medical_filler.update(line)
 
-    def complete_fields(self, transcript: str, current_state: Dict[str, Any]):
+    def complete_fields(self, transcript: str, missing_fields: list[str]):
         """
-        Devuelve (updates, missing_after):
-        - updates: dict con nuevos campos válidos a aplicar sobre current_state
-        - missing_after: lista de keys que siguieron faltando tras LLM
+        Construye un prompt para el LLM usando SOLO los campos que faltan.
         """
-        # Determinar faltantes iniciales
-        missing = compute_missing(current_state)
-        if not missing:
-            return {}, []
+        if not missing_fields:
+            return ""
 
         chunks = chunk_text(transcript, max_tokens=self.max_tokens, overlap_tokens=self.overlap_tokens)
         for ch in chunks:
-            self._extract_from_chunk(ch)
+            self._extract_from_chunk(ch, missing_fields)
 
-def compute_missing(fields: dict) -> list[str]:
-    """
-    Calcula qué campos siguen vacíos después de una pasada de regex.
-    Excluimos campos derivados como imc y tam_map.
-    """
-    return [
-        k for k in REQUIRED_FIELDS
-        if fields.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}
-    ]
+    @staticmethod
+    def build_prompt_for_missing_fields(transcript: str, missing_fields: list[str]) -> str:
+        """
+        Construye un prompt LLaMA2-style usando SOLO los campos faltantes.
+        - transcript: texto completo de la consulta.
+        - missing_fields: lista de keys internas que faltan (ej: ["edad", "peso_kg", "diagnostico"]).
+
+        El modelo debe responder con frases simples, una por campo, para
+        que luego regex pueda extraer los datos.
+        """
+        if not missing_fields:
+            # Idealmente no se llamaría a esta función en ese caso,
+            # pero por seguridad regresamos algo corto.
+            return (
+                "[INST] Solo responde con el texto: \"Sin campos faltantes\". [/INST]"
+            )
+
+        # 1) Construir descripción dinámica de campos faltantes
+        lines_desc = []
+
+        for key in missing_fields:
+            meta = FIELD_META.get(key)
+            if not meta:
+                continue
+            lines_desc.append(f"- {meta['label']} : {meta['desc']} - Ejemplo: {meta['example']}")
+
+        campos_descripcion = "\n".join(lines_desc)
+
+        # 2) Instrucciones base (puedes ajustar para aligerar tokens si hace falta)
+        sys_instructions = (
+            "Eres un extractor clínico estricto en español. "
+            "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta. "
+            "Solo te interesan los campos listados, y debes ser conservador: "
+            "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n\n"
+            "Lista de CAMBIOS que debes reportar (solo los campos faltantes) y SOLAMENTE en el formato indicado:\n"
+            f"{campos_descripcion}\n\n"
+            "Reglas importantes:\n"
+            "- Usa valores numéricos con punto decimal cuando aplique (por ejemplo 36.5).\n"
+            "- Usa unidades normalizadas tal como se describe en cada campo.\n"
+            "- No cambies el significado clínico de los valores.\n"
+            "- Si un campo no se puede deducir con certeza, NO lo menciones.\n"
+            "- Responde en el formato mencionado, sin alterar o agregar a la frase, solo una lista.\n"
+        )
+
+        # 3) Ejemplos orientados a regex
+        ejemplos = (
+            "Formato deseado:\n"
+            "- \"tension arterial: 120, 80 mmHg\"\n"
+            "- \"frecuencia cardiaca:78 lpm\"\n"
+            "- \"Talla: 1.76 m\"\n"
+            "- \"frecuencia respiratoria:68 rpm\"\n"
+            "- \"spO2:97 %\"\n"
+            "- \"Peso: 82 kg\"\n"
+            "- \"Temperatura: 36.7 grados.\"\n"
+            "- \"Glucosa: 90 mg/dL.\"\n"
+            "- \"Alergias: penicilina.\"\n"
+            "- \"Diagnóstico: cefalea tensional aguda.\"\n"
+            "- \"Receta: ibuprofeno 400 mg cada 8 horas por 3 días.\"\n\n"
+            "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
+        )
+
+        # 4) Construir el INST con contexto
+        campos_str = ", ".join(
+            FIELD_META[k]["label"] for k in missing_fields if k in FIELD_META
+        )
+
+        prompt = (
+            "[INST] <<SYS>>\n"
+            f"{sys_instructions}\n"
+            f"{ejemplos}\n"
+            "<</SYS>>\n"
+            "# CONTEXTO CLÍNICO\n"
+            f"{transcript}\n"
+            "# TAREA\n"
+            f"Con base en el contexto clínico anterior, menciona únicamente la información clara "
+            f"relacionada con los siguientes campos faltantes: {campos_str}.\n"
+            "[/INST]"
+        )
+        # print("Tokens: ", count_tokens(prompt))
+
+        return prompt
+
+    @staticmethod
+    def compute_missing(fields: dict) -> list[str]:
+        """
+        Calcula qué campos siguen vacíos después de una pasada de regex.
+        Excluimos campos derivados como imc y tam_map.
+        """
+        return [
+            k for k in REQUIRED_FIELDS
+            if fields.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}
+        ]
