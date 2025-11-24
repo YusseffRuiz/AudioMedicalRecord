@@ -10,6 +10,7 @@ from .medical_filler import ClinicalFormFiller
 from .field_completer_engine import FieldCompleterEngine, FIELD_LABELS
 
 
+
 app = FastAPI(title="Clinical Capture API", version="0.1.0")
 
 # Config mínima vía variables de entorno
@@ -68,13 +69,12 @@ async def process_audio_session(
     print("Audio file found")
     # 2) Transcribir con Whisper
     text, conf, result = asr_engine.transcribe_file(str(tmp_path), language=language)
-    print("Transcribed audio")
     # 3) Extraer campos clínicos usando tu filler (regex + guardrails)
     #    IMPORTANTE: limpia el estado primero, para no contaminar entre multiples requests
     clinical_filler.reset_state()
     llm_filler = FieldCompleterEngine(LLM_MODEL_PATH, medical_filler=clinical_filler, max_tokens_per_chunk=300)
     print("LLM Created")
-    transcript_full = " ".join(text)
+    transcript_full = "".join(text)
     fields_final, still_missing_keys = process_transcript_with_regex_and_llm(llm_filler, clinical_filler, transcript_full)
 
 

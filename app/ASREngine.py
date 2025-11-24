@@ -44,7 +44,7 @@ class AsrEngine:
         # Materializar el generador
         segments_list = list(segments)
         # Concatenar texto
-        text = " ".join(seg.text.strip() for seg in segments_list)
+        text = "".join(seg.text.strip() for seg in segments_list)
 
         # Confianza aproximada a partir de avg_logprob
         logps = [seg.avg_logprob for seg in segments if seg.avg_logprob is not None]

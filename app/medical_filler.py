@@ -37,7 +37,7 @@ class ClinicalFormFiller:
     _re_edad = re.compile(r"\b(?:edad\s*[:\-]?\s*)?(\d{1,3})\s*(?:años?|año)\b", re.I)
     _re_peso = re.compile(r"\b(?:peso\s*[:\-]?\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:kg|kilogramos?)\b", re.I)
     _re_talla_m = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*(m|metros|mt)\b",re.I)
-    _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*cm\b",re.I)
+    _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d{2,3}(?:[.,]\d{1,2})?)\s*(?:cm|cent[ií]metros?)\b" ,re.I)
     _re_ta = re.compile(
         r"\b(?:T/?A|TA|[tT]ensión\s*[aA]rterial)?\s*"  # 
         r"(?:[:\-]?\s*)?"  # separador 
@@ -69,8 +69,10 @@ class ClinicalFormFiller:
     )
     _re_gluc = re.compile(r"\b(?:gluc(?:osa)?|glucemia)\s*(?:[:\-]?\s*)?(?:es\s+de\s+|de\s+|en\s+)?(\d{1,3}(?:[.,]\d+)?)\s*(?:mg/?dL|mgdL)?\b",
     re.I)
-    _re_alerg_none = re.compile(r"\b(no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
-    _re_alerg = re.compile(r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*([A-Za-zÁÉÍÓÚÑÜáéíóúñ0-9 ,\-]+)", re.I)
+    _re_alerg_none = re.compile(r"\b(sin\s+alerg(?:ias?|i[cs]o)|no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
+    _re_alerg = re.compile(r"\balerg(?:ias?)?\s*(?:a|:)\s*([A-Za-zÁÉÍÓÚÜÑáéíóúñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúñ]+)?)", re.I)
+    _re_diag = re.compile(r"\b(?:diagn[oó]stico(?:\s*es|\s*:)?)\s*(.*)", re.I)
+    _re_receta = re.compile(r"\breceta(?:\s*indicada|\s*es|\s*:)?\s*(.*)", re.I)
 
     # Diagnóstico y receta se capturarán con métodos explícitos
     def __init__(self):
@@ -122,7 +124,6 @@ class ClinicalFormFiller:
         # TA
         m = self._re_ta.search(s)
         if m:
-            print(m.groups())
             sis, dia = int(m.group(1)), int(m.group(2))
             if 60 <= sis <= 260 and 30 <= dia <= 160:
                 if self.state.ta_sis != sis:
@@ -148,7 +149,6 @@ class ClinicalFormFiller:
         # FR
         m = self._re_fr.search(s)
         if m:
-            print(m.groups())
             fr = int(m.group(1))
             if 5 <= fr <= 80 and self.state.fr_rpm != fr:
                 self.state.fr_rpm = fr
@@ -157,7 +157,6 @@ class ClinicalFormFiller:
         # SpO2
         m = self._re_spo2.search(s)
         if m:
-            print(m.groups())
             spo2 = int(m.group(1))
             if 50 <= spo2 <= 100 and self.state.spo2_pct != spo2:
                 self.state.spo2_pct = spo2
@@ -166,7 +165,6 @@ class ClinicalFormFiller:
         # Temperatura
         m = self._re_temp.search(s)
         if m:
-            print(m.groups())
             temp = float(m.group(1))
             # Filtra valores plausibles humanos
             if 30.0 <= temp <= 45.0 and self.state.temp_c != temp:
@@ -176,7 +174,6 @@ class ClinicalFormFiller:
         # Glucosa
         m = self._re_gluc.search(s)
         if m:
-            print(m.groups())
             gluc = int(m.group(1))
             if 20.0 <= gluc <= 600.0 and self.state.gluc_mgdl != gluc:
                 self.state.gluc_mgdl = gluc
@@ -199,6 +196,20 @@ class ClinicalFormFiller:
                     elif cand.lower() not in self.state.alergias.lower():
                         self.state.alergias = f"{self.state.alergias}, {cand}"
                         changed["alergias"] = self.state.alergias
+
+        m = self._re_diag.search(s)
+        if m:
+            diag = m.group(1).strip(" .,-")
+            if diag:
+                self.state.diagnostico = diag
+                changed["diagnostico"] = diag
+
+        m = self._re_receta.search(s)
+        if m:
+            rec = m.group(1).strip(" .,-")
+            if rec:
+                self.state.receta = rec
+                changed["receta"] = rec
 
         return changed
 

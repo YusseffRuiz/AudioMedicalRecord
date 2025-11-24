@@ -30,7 +30,7 @@ FIELD_META = {
                     "desc": "talla/altura en metros (float, por ejemplo 1.76)",
                     "example": "La talla es de 1.76 metros.",
                    },
-    "t_a":      {"label": "Tensión arterial",
+    "t_a":        {"label": "Tensión arterial",
                     "desc": "tensión arterial en mmHg (entero en forma X,Y, mmHg)",
                     "example": "La presión arterial es de 120 sobre 80",
                   },
@@ -165,13 +165,13 @@ class FieldCompleterEngine:
         cuda_available = False
         # print("CUDA available:", cuda_available)
 
-        print("Initializing Model ...")
+        # print("Initializing Model ...")
         gpu_layers = 0
-        config = {'max_new_tokens': 160, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+        config = {'max_new_tokens': 340, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                   "threads": os.cpu_count()}
         if cuda_available:
             gpu_layers = 16
-            config = {'max_new_tokens': 160, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+            config = {'max_new_tokens': 340, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
 
         # self.llm_model = None
@@ -192,7 +192,7 @@ class FieldCompleterEngine:
         return (
             f"[INST] <<SYS>>\n{self.initial_prompt}\n<</SYS>>\n\n"
             f"# CONTEXTO\n{context}\n\n"
-            "# PREGUNTA\nExtrae los campos desde el contexto. Si no hay ninguno, devuelve {{}}.\n[/INST]"
+            "# PREGUNTA\nExtrae los campos desde el contexto en el formato especificado. Si no hay ninguno, devuelve {{}}.\n[/INST]"
         )
 
     @staticmethod
@@ -225,10 +225,9 @@ class FieldCompleterEngine:
             if error_cnt >= 5:
                 success = True
                 print("LLM Failed")
-        # Habilitar para debugging
+        # Habilitar para debugging de la respuesta del LLM
         print("Respuesta LLM: ")
         print(raw)
-        # print("#################")
         lines = raw.strip().splitlines()
         for line in lines:
             self.medical_filler.update(line)
@@ -242,6 +241,7 @@ class FieldCompleterEngine:
 
         chunks = chunk_text(transcript, max_tokens=self.max_tokens, overlap_tokens=self.overlap_tokens)
         for ch in chunks:
+            # print(ch) # solo para debugging de analisis del texto transcrito
             self._extract_from_chunk(ch, missing_fields)
 
     @staticmethod
@@ -268,41 +268,46 @@ class FieldCompleterEngine:
             meta = FIELD_META.get(key)
             if not meta:
                 continue
-            lines_desc.append(f"- {meta['label']} : {meta['desc']} - Ejemplo: {meta['example']}")
+            # lines_desc.append(f"- {meta['label']} : {meta['desc']} - Ejemplo: {meta['example']}")
+            lines_desc.append(f"- {meta['label']}")
 
         campos_descripcion = "\n".join(lines_desc)
 
         # 2) Instrucciones base (puedes ajustar para aligerar tokens si hace falta)
         sys_instructions = (
             "Eres un extractor clínico estricto en español. "
-            "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta. "
-            "Solo te interesan los campos listados, y debes ser conservador: "
+            "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta en el formato estricto:"
+            "'campo: valor' sin aclaraciones, sin palabras extras. Sólamente los apartados de Alergias, Diagnostico y receta pueden tener mas detalles. "
+            "Solo te interesan los campos listados, y debes ser conservador. "
             "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n\n"
-            "Lista de CAMBIOS que debes reportar:\n"
+            "Lista de CAMBIOS que debes reportar, junto con descripción y ejemplo de como lo vas a encontrar en el texto.\n"
+            "A aclarar, estos son los campos, pero el formato es el antes mencionado:\n"
             f"{campos_descripcion}\n\n"
+            "Recuerda que la tension arterial o presión arterial es lo mismo y se leerá de 2 formas: diciendo distólica y sistólica y como solo una frase: La presión arterial es de 120 sobre 80. En ambos casos se debe expresar: tensión arterial: 120, 80 mmHg.\n"
             "Reglas importantes:\n"
             "- Usa valores numéricos con punto decimal cuando aplique (por ejemplo 36.5).\n"
             "- Usa unidades normalizadas tal como se describe en cada campo.\n"
             "- No cambies el significado clínico de los valores.\n"
             "- Si un campo no se puede deducir con certeza, NO lo menciones.\n"
-            "- El formato a mostrar tu respuesta SOLAMENTE debe ser una lista de la siguiente forma: 'campo: valor (unidad)'."
+            "- El formato a mostrar tu respuesta SOLAMENTE debe ser una lista de la siguiente forma, sin cambiar: 'campo: valor'.\n"
             "- Responde en el formato mencionado, sin alterar o agregar a la frase, sin repetir palabras, sin explicaciones sobre el campo.\n"
+            "- No menciones donde encontraste la información, coloca solo el formato requerido."
         )
 
         # 3) Ejemplos orientados a regex
         ejemplos = (
-            "Formato requerido (no cambiar):\n"
-            "- \"tension arterial: 120, 80 mmHg\"\n"
-            "- \"frecuencia cardiaca:78 lpm\"\n"
-            "- \"Talla: 1.76 m\"\n"
-            "- \"frecuencia respiratoria:68 rpm\"\n"
-            "- \"spO2:97 %\"\n"
-            "- \"Peso: 82 kg\"\n"
-            "- \"Temperatura: 36.7 grados.\"\n"
-            "- \"Glucosa: 90 mg/dL.\"\n"
-            "- \"Alergias: penicilina.\"\n"
-            "- \"Diagnóstico: cefalea tensional aguda.\"\n"
-            "- \"Receta: ibuprofeno 400 mg cada 8 horas por 3 días.\"\n\n"
+            "Formato estricto requerido, no cambiar, ni agregar cosas:\n"
+            "- \"tension arterial: X, Y mmHg\"\n"
+            "- \"frecuencia cardiaca:X lpm\"\n"
+            "- \"Talla: X metros\"\n"
+            "- \"frecuencia respiratoria:X rpm\"\n"
+            "- \"spO2:X %\"\n"
+            "- \"Peso: X kg\"\n"
+            "- \"Temperatura: X grados.\"\n"
+            "- \"Glucosa: X mg/dL.\"\n"
+            "- \"Alergias: (ej. penicilina|sin alergias).\"\n"
+            "- \"Diagnóstico: (ej. Inflamacion en garganta.| sin diagnostico)\"\n"
+            "- \"Receta: (ej. ibuprofeno 400 mg cada 8 horas por 3 días | Sin receta).\"\n\n"
             "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
         )
 
