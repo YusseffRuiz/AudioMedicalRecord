@@ -226,8 +226,8 @@ class FieldCompleterEngine:
                 success = True
                 print("LLM Failed")
         # Habilitar para debugging de la respuesta del LLM
-        print("Respuesta LLM: ")
-        print(raw)
+        # print("Respuesta LLM: ")
+        # print(raw)
         lines = raw.strip().splitlines()
         for line in lines:
             self.medical_filler.update(line)
