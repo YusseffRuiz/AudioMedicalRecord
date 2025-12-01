@@ -59,7 +59,6 @@ async def process_audio_session(
     session_id: str | None = Form(None),
     language: str = Form("es"),
 ):
-    t0 = time.time()
 
     # 1) Guardar audio temporalmente
     suffix = Path(file.filename).suffix or ".wav"
@@ -68,15 +67,18 @@ async def process_audio_session(
         tmp_path = Path(tmp.name)
     print("Audio file found")
     # 2) Transcribir con Whisper
+    t0 = time.time()
     text, conf, result = asr_engine.transcribe_file(str(tmp_path), language=language)
+    t1 = time.time()
     # 3) Extraer campos clínicos usando tu filler (regex + guardrails)
     #    IMPORTANTE: limpia el estado primero, para no contaminar entre multiples requests
     clinical_filler.reset_state()
     llm_filler = FieldCompleterEngine(LLM_MODEL_PATH, medical_filler=clinical_filler, max_tokens_per_chunk=300)
     print("LLM Created")
     transcript_full = "".join(text)
+    t2 = time.time()
     fields_final, still_missing_keys = process_transcript_with_regex_and_llm(llm_filler, clinical_filler, transcript_full)
-
+    t3 = time.time()
 
     # 4) Determinar campos faltantes (ignorando derivados)
     missing_labels = []
@@ -99,6 +101,8 @@ async def process_audio_session(
         "missing_fields": ", ".join(missing_labels),
         "meta": {
             "whisper_model": WHISPER_MODEL,
+            "asr_time": int((t1 - t0)*1000),
+            "llm_time": int((t3 - t2)*1000),
             "processing_ms": dt_ms,
         },
     }
