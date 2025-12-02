@@ -39,7 +39,8 @@ class AsrEngine:
         # )
         segments, info = self.model.transcribe(audio,
             language=language,
-            without_timestamps=without_timestamps, beam_size=5, best_of=1,)
+            without_timestamps=without_timestamps, beam_size=1, best_of=1,
+                                               vad_filter=True, word_timestamps=False)
 
 
         # Materializar el generador
