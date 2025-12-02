@@ -47,7 +47,7 @@ def process_transcript_with_regex_and_llm(llm_model, form_filler, transcript_ful
     llm_model.complete_fields(transcript_full, missing_1)
 
     fields_final = form_filler.snapshot()
-    print(fields_final)
+    # print(fields_final)
     missing_final = llm_model.compute_missing(fields_final)
 
     return fields_final, missing_final
@@ -71,6 +71,7 @@ async def process_audio_session(
     t0 = time.time()
     text, conf, result = asr_engine.transcribe_file(str(tmp_path), language=language)
     t1 = time.time()
+    print(text)
     # 3) Extraer campos clínicos usando tu filler (regex + guardrails)
     #    IMPORTANTE: limpia el estado primero, para no contaminar entre multiples requests
     clinical_filler.reset_state()

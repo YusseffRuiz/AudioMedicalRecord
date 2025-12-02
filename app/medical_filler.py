@@ -48,14 +48,21 @@ class ClinicalFormFiller:
         re.I
     )
     _re_fc = re.compile(
-        r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\b"  # FC o 'frecuencia cardiaca'
-        r"[^0-9]{0,12}"  # hasta 12 caracteres no numéricos (espacios, 'es de', 'de')
-        r"(\d{2,3})"  # valor 2–3 dígitos
-        r"(?:\s*(?:latidos\s+por\s+minuto|lpm|bpm))?",  # sufijo opcional
-        re.I
+        r"\b(?:FC|frecuencia\s*card\w*)\b"  # 'frecuencia card...' tolerante a errores (cardiaca, cardiáquea, etc.)
+        r"[^0-9]{0,20}"  # ruido: ' es de ', ' de '
+        r"(\d{2,3})"  # 2–3 dígitos
+        r"(?:\s*(?:latidos\s+por\s+minuto|lpm|bpm))?",  # unidad opcional
+        re.I,
     )
-    _re_fr = re.compile(r"\b(?:FR|[Ff]recuencia\s*[Rr]espiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
-    re.I)
+    # Frecuencia respiratoria
+    _re_fr = re.compile(
+        r"\b(?:FR|frecuencia\s*respirator\w*)\b"  # FR o 'frecuencia respiratoria' (permite pequeños errores)
+        r"[^0-9]{0,20}"  # hasta 20 chars no numéricos (' es de ', ' de ', etc.)
+        r"(\d{1,2})"  # número 1–2 dígitos
+        r"(?:\s*(?:respiraciones?\s+por\s+minuto|rpm))?",  # unidad opcional
+        re.I,
+    )
+
     _re_spo2 = re.compile(
         r"\b(?:SpO₂|SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
         r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
@@ -155,7 +162,7 @@ class ClinicalFormFiller:
         m = self._re_fr.search(s)
         if m:
             fr = int(m.group(1))
-            if 20 <= fr <= 250 and self.state.fr_rpm != fr:
+            if 5 <= fr <= 80 and self.state.fr_rpm != fr:
                 self.state.fr_rpm = fr
                 changed["fr_rpm"] = fr
 
