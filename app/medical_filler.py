@@ -35,7 +35,13 @@ class ClinicalFormFiller:
     # Patrones (sensibles a español clínico común)
     # Nota: se prioriza robustez/legibilidad; ajusta a tus frases reales luego.
     _re_edad = re.compile(r"\b(?:edad\s*[:\-]?\s*)?(\d{1,3})\s*(?:años?|año)\b", re.I)
-    _re_peso = re.compile(r"\b(?:peso\s*[:\-]?\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:kg|kilogramos?)\b", re.I)
+    _re_peso = re.compile(
+        r"\b(?:peso(?:\s+actual)?)\b"  # 'peso' o 'peso actual'
+        r"[^0-9]{0,12}"  # ' actual ', ' es de ', etc.
+        r"(\d{2,3}(?:[.,]\d)?)"  # 2–3 dígitos, opcional decimal
+        r"(?:\s*(?:kg|kilos?))?",  # unidad opcional
+        re.I,
+    )
     _re_talla_m = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*(m|metros|mt)\b",re.I)
     _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d{2,3}(?:[.,]\d{1,2})?)\s*(?:cm|cent[ií]metros?)\b" ,re.I)
     _re_ta = re.compile(
@@ -62,14 +68,14 @@ class ClinicalFormFiller:
         r"(?:\s*(?:respiraciones?\s+por\s+minuto|rpm))?",  # unidad opcional
         re.I,
     )
-
     _re_spo2 = re.compile(
-        r"\b(?:SpO₂|SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
+        r"\b(?:SpO2|SpO₂|Sp02|saturaci[óo]n\s+de\s+ox[ií]geno)\b"
         r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
         r"(?:[:\-]?\s*)?"  # separador opcional
-        r"(\d{2,3})\s*"  # valor 2–3 dígitos
+        r"[^0-9]{0,15}"
+        r"(\d{2,3})\s*%"
         r"(?:%|por\s*ciento)?\b",  # % o 'por ciento'
-        re.I
+        re.I,
     )
     _re_temp = re.compile(
         r"\b(?:temp(?:eratura)?(?:\s*corporal)?)\s*"  # temp / temperatura / temperatura corporal
