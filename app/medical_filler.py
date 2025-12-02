@@ -201,15 +201,17 @@ class ClinicalFormFiller:
         if m:
             diag = m.group(1).strip(" .,-")
             if diag:
-                self.state.diagnostico = diag
-                changed["diagnostico"] = diag
+                value = self._clean_diag_or_receta(diag)
+                self.state.diagnostico = value
+                changed["diagnostico"] = value
 
         m = self._re_receta.search(s)
         if m:
             rec = m.group(1).strip(" .,-")
             if rec:
-                self.state.receta = rec
-                changed["receta"] = rec
+                value = self._clean_diag_or_receta(rec)
+                self.state.receta = value
+                changed["receta"] = value
 
         return changed
 
@@ -268,3 +270,48 @@ class ClinicalFormFiller:
         self.update(text)
 
         return self.snapshot()
+    @staticmethod
+    def _clean_diag_or_receta(text: str, max_chars: int = 120) -> str:
+        """
+        Limpia diagnóstico/receta:
+        - quita preguntas y cierres de conversación,
+        - limita longitud,
+        - corta en la primera oración razonable.
+        """
+        if not text:
+            return text
+
+        t = text.strip()
+
+        # 1) Cortar desde ciertas frases típicas de cierre
+        cortes = [
+            "¿Con esto terminamos",
+            "¿Alguna duda",
+            "¿Algo más que quiera revisar",
+            "Muchas gracias",
+            "muchas gracias",
+            "buen día",
+            "buen dia",
+        ]
+        for marker in cortes:
+            idx = t.find(marker)
+            if idx != -1:
+                t = t[:idx].strip()
+                break
+
+        # 2) Opcional: cortar en el primer signo de interrogación
+        q_idx = t.find("¿")
+        if q_idx > 0:
+            t = t[:q_idx].strip()
+
+        # 3) Limitar longitud total
+        if len(t) > max_chars:
+            t = t[:max_chars]
+            # evitar cortar a media palabra
+            t = t.rsplit(" ", 1)[0].strip()
+
+        # 4) Asegurar que termina más o menos decente
+        if t and t[-1] not in ".;":
+            t = t + "."
+
+        return t

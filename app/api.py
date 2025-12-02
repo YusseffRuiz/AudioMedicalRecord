@@ -14,8 +14,8 @@ from .field_completer_engine import FieldCompleterEngine, FIELD_LABELS
 app = FastAPI(title="Clinical Capture API", version="0.1.0")
 
 # Config mínima vía variables de entorno
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "medium")
-LLM_MODEL_PATH = os.getenv("LLM_MODEL_PATH", "models/llama-2-7b-chat.Q5_K_M.gguf")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+LLM_MODEL_PATH = os.getenv("LLM_MODEL_PATH", "models/llama-2-7b-chat.Q4_K_M.gguf")
 
 # Instancias globales
 asr_engine = AsrEngine(model_size=WHISPER_MODEL)
