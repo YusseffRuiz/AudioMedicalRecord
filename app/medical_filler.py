@@ -70,7 +70,7 @@ class ClinicalFormFiller:
     )
     _re_spo2 = re.compile(
         r"\b(?:SpO2|SpO₂|Sp02|saturaci[óo]n\s+de\s+ox[ií]geno)\b"
-        r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
+        r"(|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
         r"(?:[:\-]?\s*)?"  # separador opcional
         r"[^0-9]{0,15}"
         r"(\d{2,3})\s*%"
