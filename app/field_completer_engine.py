@@ -167,11 +167,11 @@ class FieldCompleterEngine:
 
         # print("Initializing Model ...")
         gpu_layers = 0
-        config = {'max_new_tokens': 90, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+        config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                   "threads": os.cpu_count()}
         if cuda_available:
             gpu_layers = 16
-            config = {'max_new_tokens': 90, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+            config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
 
         # self.llm_model = None

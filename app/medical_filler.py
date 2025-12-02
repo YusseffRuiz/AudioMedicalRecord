@@ -69,12 +69,12 @@ class ClinicalFormFiller:
         re.I,
     )
     _re_spo2 = re.compile(
-        r"\b(?:SpO2|SpO₂|Sp02|saturaci[óo]n\s+de\s+ox[ií]geno)\b"
-        r"(|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
-        r"(?:[:\-]?\s*)?"  # separador opcional
-        r"[^0-9]{0,15}"
-        r"(\d{2,3})\s*%"
-        r"(?:%|por\s*ciento)?\b",  # % o 'por ciento'
+        r"^[\*\-\s]*"  # opcional bullet '*' o '-' al inicio
+        r"(?:SpO2|SPO2|SpO₂|SPO₂|spo2|spo₂|"  # variantes con y sin subíndice
+        r"saturaci[óo]n\s+de\s+ox[ií]geno)"  # o la frase completa
+        r"[^0-9]{0,15}"  # ' es de ', ' está en ', etc.
+        r"(\d{2,3})"  # 2–3 dígitos
+        r"\s*%",  # seguido de '%'
         re.I,
     )
     _re_temp = re.compile(
@@ -85,8 +85,14 @@ class ClinicalFormFiller:
         r"(?:C|cent(?:í|i)grados?|centigrados)?\b",  # C / centígrados / centigrados (opc.)
         re.I
     )
-    _re_gluc = re.compile(r"\b(?:gluc(?:osa)?|glucemia)\s*(?:[:\-]?\s*)?(?:es\s+de\s+|de\s+|en\s+)?(\d{1,3}(?:[.,]\d+)?)\s*(?:mg/?dL|mgdL)?\b",
-    re.I)
+    _re_gluc = re.compile(
+        r"^[\*\-\s]*"
+        r"(?:glucosa(?:\s+capilar)?(?:\s+en\s+ayunas)?)"  # glucosa, glucosa capilar, en ayunas
+        r"[^0-9]{0,20}"  # ' está en ', ' es de ', etc.
+        r"(\d{2,3}(?:[.,]\d)?)"  # 2–3 dígitos, opcional decimal
+        r"(?:\s*(?:mg/?dL|miligramos?\s+por\s+decilitro))?",  # unidad opcional
+        re.I,
+    )
     _re_alerg_none = re.compile(r"\b(sin\s+alerg(?:ias?|i[cs]o)|no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
     _re_alerg = re.compile(r"\balerg(?:ias?)?\s*(?:a|:)\s*([A-Za-zÁÉÍÓÚÜÑáéíóúñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúñ]+)?)", re.I)
     _re_diag = re.compile(r"\b(?:diagn[oó]stico(?:\s*es|\s*:)?)\s*(.*)", re.I)
