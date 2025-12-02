@@ -167,11 +167,11 @@ class FieldCompleterEngine:
 
         # print("Initializing Model ...")
         gpu_layers = 0
-        config = {'max_new_tokens': 340, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+        config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                   "threads": os.cpu_count()}
         if cuda_available:
             gpu_layers = 16
-            config = {'max_new_tokens': 340, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+            config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
 
         # self.llm_model = None
@@ -275,40 +275,41 @@ class FieldCompleterEngine:
 
         # 2) Instrucciones base (puedes ajustar para aligerar tokens si hace falta)
         sys_instructions = (
-            "Eres un extractor clínico estricto en español. "
-            "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta en el formato estricto:"
-            "'campo: valor' sin aclaraciones, sin palabras extras. Sólamente los apartados de Alergias, Diagnostico y receta pueden tener mas detalles. "
-            "Solo te interesan los campos listados, y debes ser conservador. "
-            "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n\n"
-            "Lista de CAMBIOS que debes reportar, junto con descripción y ejemplo de como lo vas a encontrar en el texto.\n"
-            "A aclarar, estos son los campos, pero el formato es el antes mencionado:\n"
-            f"{campos_descripcion}\n\n"
-            "Recuerda que la tension arterial o presión arterial es lo mismo y se leerá de 2 formas: diciendo distólica y sistólica y como solo una frase: La presión arterial es de 120 sobre 80. En ambos casos se debe expresar: tensión arterial: 120, 80 mmHg.\n"
-            "Reglas importantes:\n"
-            "- Usa valores numéricos con punto decimal cuando aplique (por ejemplo 36.5).\n"
-            "- Usa unidades normalizadas tal como se describe en cada campo.\n"
-            "- No cambies el significado clínico de los valores.\n"
-            "- Si un campo no se puede deducir con certeza, NO lo menciones.\n"
-            "- El formato a mostrar tu respuesta SOLAMENTE debe ser una lista de la siguiente forma, sin cambiar: 'campo: valor'.\n"
-            "- Responde en el formato mencionado, sin alterar o agregar a la frase, sin repetir palabras, sin explicaciones sobre el campo.\n"
-            "- No menciones donde encontraste la información, coloca solo el formato requerido."
+            "Eres un extractor clínico muy estricto en español.\n"
+            "Tu única tarea es leer la transcripción de una consulta médica y escribir "
+            "solo los campos clínicos que se te pidan, en el formato EXACTO:\n"
+            "Campo: valor\n\n"
+            "Reglas OBLIGATORIAS:\n"
+            "1) Responde solo con una línea por campo faltante.\n"
+            "2) Cada línea debe seguir exactamente el formato: 'Campo: valor'.\n"
+            "3) NO uses viñetas, NO uses comillas, NO expliques nada, NO agregues texto antes ni después.\n"
+            "4) Usa exactamente los nombres de campo indicados (misma ortografía y mayúsculas).\n"
+            "5) No escribas saludos, despedidas, preguntas ni texto de conversación.\n"
+            "6) Si un campo no se puede deducir con certeza del contexto, NO lo escribas.\n"
+            "7) Para campos numéricos usa números árabes y punto decimal cuando aplique (ej. 36.5).\n"
+            "8) Para diagnóstico y receta usa una sola oración corta, sin copiar diálogos textuales.\n"
+            "9) No incluyas frases como '¿Con esto terminamos?', '¿Alguna duda?', 'Muchas gracias', etc.\n"
+            "10) No repitas la misma información en más de un campo.\n\n"
+            "Campos faltantes (solo estos te interesan):\n"
+            f"{campos_descripcion}\n"
         )
 
         # 3) Ejemplos orientados a regex
         ejemplos = (
-            "Formato estricto requerido, no cambiar, ni agregar cosas:\n"
-            "- \"tension arterial: X, Y mmHg\"\n"
-            "- \"frecuencia cardiaca:X lpm\"\n"
-            "- \"Talla: X metros\"\n"
-            "- \"frecuencia respiratoria:X rpm\"\n"
-            "- \"spO2:X %\"\n"
-            "- \"Peso: X kg\"\n"
-            "- \"Temperatura: X grados.\"\n"
-            "- \"Glucosa: X mg/dL.\"\n"
-            "- \"Alergias: (ej. penicilina|sin alergias).\"\n"
-            "- \"Diagnóstico: (ej. Inflamacion en garganta.| sin diagnostico)\"\n"
-            "- \"Receta: (ej. ibuprofeno 400 mg cada 8 horas por 3 días | Sin receta).\"\n\n"
-            "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
+            "Ejemplos de formato EXACTO (no agregues nada más):\n"
+            "Edad: 33\n"
+            "Peso: 82.0 kg\n"
+            "Talla: 1.76 m\n"
+            "Tensión arterial: 120, 80 mmHg\n"
+            "Frecuencia cardíaca: 80 lpm\n"
+            "Frecuencia respiratoria: 16 rpm\n"
+            "SpO₂: 97 %\n"
+            "Temperatura: 36.7 grados\n"
+            "Glucosa: 90 mg/dL\n"
+            "Alergias: ninguna\n"
+            "Diagnóstico: cefalea tensional aguda\n"
+            "Receta: ibuprofeno 400 mg cada 8 horas por 3 días\n\n"
+            "Si en el texto no hay información suficiente para algún campo, NO escribas esa línea.\n"
         )
 
         # 4) Construir el INST con contexto
@@ -324,8 +325,9 @@ class FieldCompleterEngine:
             "# CONTEXTO CLÍNICO\n"
             f"{transcript}\n"
             "# TAREA\n"
-            f"Con base en el contexto clínico anterior, menciona únicamente la información "
-            f"relacionada con los siguientes campos faltantes: {campos_str}.\n"
+            f"Con base en el contexto clínico anterior, escribe SOLO las líneas de los campos faltantes: {campos_str}.\n"
+            "Respeta estrictamente el formato 'Campo: valor' para cada línea. "
+            "No escribas nada fuera de esas líneas.\n"
             "[/INST]"
         )
         # print("Tokens: ", count_tokens(prompt))
