@@ -47,8 +47,13 @@ class ClinicalFormFiller:
         r"(\d{2,3})\b",  # diastólica
         re.I
     )
-    _re_fc = re.compile(r"\b(?:FC|[Ff]recuencia\s*[Cc]ard[ií]aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
-    re.I)
+    _re_fc = re.compile(
+        r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\b"  # FC o 'frecuencia cardiaca'
+        r"[^0-9]{0,12}"  # hasta 12 caracteres no numéricos (espacios, 'es de', 'de')
+        r"(\d{2,3})"  # valor 2–3 dígitos
+        r"(?:\s*(?:latidos\s+por\s+minuto|lpm|bpm))?",  # sufijo opcional
+        re.I
+    )
     _re_fr = re.compile(r"\b(?:FR|[Ff]recuencia\s*[Rr]espiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
     re.I)
     _re_spo2 = re.compile(
@@ -150,7 +155,7 @@ class ClinicalFormFiller:
         m = self._re_fr.search(s)
         if m:
             fr = int(m.group(1))
-            if 5 <= fr <= 80 and self.state.fr_rpm != fr:
+            if 20 <= fr <= 250 and self.state.fr_rpm != fr:
                 self.state.fr_rpm = fr
                 changed["fr_rpm"] = fr
 
@@ -286,6 +291,8 @@ class ClinicalFormFiller:
         # 1) Cortar desde ciertas frases típicas de cierre
         cortes = [
             "¿Con esto terminamos",
+            "Con esto terminamos",
+            "Con esto.",
             "¿Alguna duda",
             "¿Algo más que quiera revisar",
             "Muchas gracias",
