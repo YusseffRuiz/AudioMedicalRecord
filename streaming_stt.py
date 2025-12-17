@@ -5,6 +5,7 @@ import threading
 import queue
 import numpy as np
 import sounddevice as sd
+import torch
 
 
 from ASREngine import AsrEngine
@@ -13,6 +14,7 @@ from field_completer_engine import FieldCompleterEngine, FIELD_LABELS
 from audio_recording import AudioRecorder
 
 # ======= Configuración =======
+# ---- WHISPER -----
 RATE = 16000          # Hz
 CHANNELS = 1          # mono
 CHUNK_SEC = 0.5       # tamaño de chunk de captura
@@ -21,37 +23,12 @@ INTERVAL_SEC = 4      # cada cuánto lanzar transcripción
 MAX_SECONDS = 120     # tope total de grabación (2 min)
 MODEL_SIZE = "medium"  # sube a "medium" si tu CPU lo permite
 
-# ====== Prompt para el LLM ======
-EXTRACTION_PROMPT = (
-    "Eres un extractor estricto en español que tiene que llenar un historial clínico."
-    "A continuación esta la lista de los valores a llenar, entre parentesis se describe el tipo de dato que se espera y la unidad (opcional). (tipo, unidad) "
-    "- edad (entero, años)\n"
-    "- peso (float, kg),"
-    "- talla (si escuchas algo como 76 m, probablemente sea 1.76 metros) (float, m),"
-    "- tension arterial (en forma X,Y, mmHg) (Si escuchas: 'frecuencia cardiaca' pero el valor lo da como en formato '120 sobre 80, entonces es tension"
-    "- frecuencia cardiaca (entero, Ipm)"
-    "- frecuencia respiratoria (entero, Ipm)"
-    "- spo2 (entero, %): En vez de poner Oxígeno en la sangre es sp02"
-    "- temperatura (float, grados)"
-    "- glucosa (float)\n"
-    "- alergias (string corto)"
-    "- diagnostico (string)"
-    "- receta (string)\n\n"
-    "Reglas: Traduce a los campos mencionados.\n"
-    "Con el contexto que se te ofrezca, tienes que popular la información de dichos campos de la manera en que se indica en cada uno\n"
-    "Valores numéricos con punto decimal. Unidades ya normalizadas. \n"
-    "No escribas lo que esta entre paréntesis.\n"
-    "No inventes campos y escribelos tal cual se muestran en la lista.\n"
-    "Coloca la unidad que se especifica entre paréntesis, si tiene una\n"
-    "Ejemplos:\n"
-    "Texto: 'tensión ciento veinte ochenta, frecuencia 78, frecuencia respiratoria 60, saturación 97 por ciento, altura 1 76'\n"
-    "{tension arterial:120, 80, frecuencia cardiaca:78, frecuencia respiratoria:68, spO2:97, talla:1.76}\n\n"
-    "Texto: 'talla uno setenta y dos, peso 82 kilogramos'\n"
-    "{talla:1.72, peso:82.0}\n\n"
-    "Texto: 'Tension ciento diez sobre setenta, oxigeno en la sangre de 86 por ciento'\n"
-    "{tension arterial:110, 70, spo2: 86%}\n\n"
-)
-
+# ---- VARIABLES MODELOS -----
+DEVICE = 'cuda'if torch.cuda.is_available() else 'cpu'
+# audio_file_path = "Audios/GrabacionPrueba_2.wav"
+audio_file_path = "Audios/Grabacion_Prueba_3min.m4a"
+LLM_MODEL = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+AUDIO_SAVE_PATH = "_full_sessions"
 
 # ======= Estado compartido =======
 audio_q: "queue.Queue[np.ndarray]" = queue.Queue()
@@ -276,12 +253,12 @@ def transcribe_full_session(asr_engine, wav_path: str) -> str:
 
 def main():
     print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
-    asr = AsrEngine(model_size=MODEL_SIZE, device="cpu")
+    asr = AsrEngine(model_size=MODEL_SIZE, device=DEVICE)
     clinical_filler = ClinicalFormFiller()
-    audio = AudioRecorder(path="_full_sessions", rate=16000, channels=1)
+    audio = AudioRecorder(path=AUDIO_SAVE_PATH, rate=RATE, channels=CHANNELS)
     # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
     value = str(input("Escribe 2 para grabar la sesion \nEscribe 3 para usar un audio pre grabado.\n"))
-    transcript_local = None
+    wav_path = None
     if value == "1":
         print("Comienza el streaming… (Usa cntrl+C para salir)")
         print("Presiona ENTER para comenzar a grabar y usa cntrl+C para finalizar la grabacion.")
@@ -303,29 +280,31 @@ def main():
         # wav_path = record_full_session(rec_duration_sec=15 * 60)  # grabacion por varios minutos completos
         audio_file = audio.record_until_stop()
         wav_path = audio.save_audio(audio_file)
-        transcript_local = transcribe_full_session(asr, wav_path)
     else:  # Uso de Audio pre grabado
-        wav_path = "Audios/GrabacionPrueba_2.wav"
-        transcript_local = transcribe_full_session(asr, wav_path)
-    print("Inicializando analisis via LLM")
-    llm_model_name = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
-    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=300)
-    llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+        wav_path = audio_file_path
+    t_0_transcript = time.time()
+    transcript_local = transcribe_full_session(asr, wav_path)
+    t_1_transcript = time.time()
+    t_transcript = t_1_transcript - t_0_transcript
 
-    print("Texto a transcribir:")
-    print(str(transcript_local))
+    print("Inicializando analisis via LLM")
+    llm_filler = FieldCompleterEngine(LLM_MODEL, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+
+    t_0_process = time.time()
     finalize_session_and_save(llm_filler, clinical_filler, transcript_local)
+    t_1_process = time.time()
+    t_process = t_1_process - t_0_process
     print("Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
           "\nAlergias\nDiagnóstico\nReceta.")
+    print(f"Time to transcript: {t_transcript} seconds")
+    print(f"Time to fill medical history: {t_process} seconds")
 
 
 def prueba_llm():
     TRANSCRIPT_LOG =[' nuevamente comenzamos una', ' Comenzamos un nuevo modelo para paciente de nombre Adan cuya edad es de 33 años', ' 33 años peso de 83 kilogramos', ' altura es de uno 76 metros', ' Su tension arterial es de 120 sobre 80 y su frecuencia cardíaca es de 80.', 'la glucosa se encuentra en 40 y la temperatura corporea', ' la temperatura corporal en 36.5 grados centígrados su y', ' IMC se encuentra en rango normal de 24 IMC y el oxigen...', ' y el oxígeno en la sangre de 86%.']
     print("Inicializando analisis via LLM")
-    # llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
-    llm_model_name = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
     clinical_filler = ClinicalFormFiller()
-    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+    llm_filler = FieldCompleterEngine(LLM_MODEL, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
     print("Texto a transcribir:")
     print(str(TRANSCRIPT_LOG))
     finalize_session_and_save(llm_filler, clinical_filler, TRANSCRIPT_LOG)
