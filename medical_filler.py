@@ -70,13 +70,20 @@ class ClinicalFormFiller:
     _re_gluc = re.compile(r"\b(?:gluc(?:osa)?|glucemia)\s*(?:[:\-]?\s*)?(?:es\s+de\s+|de\s+|en\s+)?(\d{1,3}(?:[.,]\d+)?)\s*(?:mg/?dL|mgdL)?\b",
     re.I)
     _re_alerg_none = re.compile(r"\b(no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
-    _re_alerg = re.compile(r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*([A-Za-zÁÉÍÓÚÑÜáéíóúñ0-9 ,\-]+)", re.I)
+    _re_alerg = re.compile(
+        r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*[:\-]?\s*(?P<val>.+)$"
+        , re.I)
+    _re_diag = re.compile(
+        r"\b(?:diagn[oó]stico(?:\s+principal)?|impresi[oó]n\s+diagn[oó]stica)\s*[:\-]?\s*(?P<val>.+)$",
+        re.I
+    )
+    NO_CAND_RE = r"\b(no\s+se\s+especific[oó]|no\s+se\s+inform[oó]|no\s+se\s+menciona)\b"
 
     # Diagnóstico y receta se capturarán con métodos explícitos
     def __init__(self):
         self.state = ClinicalFields()
 
-    def update(self, text: str) -> Dict[str, object]:
+    def update(self, text: str, reg_flag : bool =True) -> Dict[str, object]:
         """Procesa texto incremental y actualiza el estado. Devuelve sólo los campos que cambiaron."""
         changed: Dict[str, object] = {}
         s = text.strip()
@@ -177,23 +184,36 @@ class ClinicalFormFiller:
                 self.state.gluc_mgdl = gluc
                 changed["gluc_mgdl"] = gluc
 
-        # Alergias
-        if self._re_alerg_none.search(s):
-            if self.state.alergias != "Ninguna":
-                self.state.alergias = "Ninguna"
-                changed["alergias"] = "Ninguna"
-        else:
-            m = self._re_alerg.search(s)
+        if not reg_flag:
+            m = self._re_diag.search(s)
             if m:
-                cand = m.group(1).strip(" .,-")
+                cand = m.group("val").strip(" .,-\"")
                 # Si ya hay algo, une de forma única
-                if cand:
-                    if not self.state.alergias:
-                        self.state.alergias = cand
-                        changed["alergias"] = cand
-                    elif cand.lower() not in self.state.alergias.lower():
-                        self.state.alergias = f"{self.state.alergias}, {cand}"
-                        changed["alergias"] = self.state.alergias
+                if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                    if not self.state.diagnostico:
+                        self.state.diagnostico = cand
+                        changed["diagnostico"] = cand
+                    elif cand.lower() not in self.state.diagnostico.lower():
+                        self.state.diagnostico = f"{self.state.diagnostico}, {cand}"
+                        changed["diagnostico"] = self.state.diagnostico
+
+            # Alergias
+            if self._re_alerg_none.search(s):
+                if self.state.alergias != "Ninguna":
+                    self.state.alergias = "Ninguna"
+                    changed["alergias"] = "Ninguna"
+            else:
+                m = self._re_alerg.search(s)
+                if m:
+                    cand = m.group("val").strip(" .,-\"")
+                    # Si ya hay algo, une de forma única
+                    if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                        if not self.state.alergias:
+                            self.state.alergias = cand
+                            changed["alergias"] = cand
+                        elif cand.lower() not in self.state.alergias.lower():
+                            self.state.alergias = f"{self.state.alergias}, {cand}"
+                            changed["alergias"] = self.state.alergias
 
         return changed
 

@@ -5,8 +5,6 @@ import threading
 import queue
 import numpy as np
 import sounddevice as sd
-# import whisper
-from typing import List
 
 
 from ASREngine import AsrEngine
@@ -251,6 +249,7 @@ def capture_thread():
 #         except Exception:
 #             pass
 
+
 def record_full_session(rec_duration_sec: int = 15 * 60) -> str:
     """
     Graba toda la consulta en un WAV usando AudioRecorder.
@@ -279,59 +278,59 @@ def main():
     print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
     asr = AsrEngine(model_size=MODEL_SIZE, device="cpu")
     clinical_filler = ClinicalFormFiller()
+    audio = AudioRecorder(path="_full_sessions", rate=16000, channels=1)
     # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
-    value = 2
+    value = str(input("Escribe 2 para grabar la sesion \nEscribe 3 para usar un audio pre grabado.\n"))
     transcript_local = None
     if value == "1":
-        print("Comienza el streaming… (Ctrl+C para salir, máx 2 min)")
-
-        while True:
-            print("Presiona ENTER para comenzar a grabar y cntrl+C para terminar.")
-            fin = input("\nComienza a dictar ")
-            if fin == "Terminar":
-                break
-            t_cap = threading.Thread(target=capture_thread, daemon=True)
-            # t_con = threading.Thread(target=consumer_thread, args=(asr,), daemon=True)
-            t_cap.start()
-            # t_con.start()
-            try:
-                while not stop_flag.is_set():
-                    time.sleep(0.2)
-            except KeyboardInterrupt:
-                stop_flag.set()
-
-            t_cap.join()
-            # t_con.join()
+        print("Comienza el streaming… (Usa cntrl+C para salir)")
+        print("Presiona ENTER para comenzar a grabar y usa cntrl+C para finalizar la grabacion.")
+        t_cap = threading.Thread(target=capture_thread, daemon=True)
+        # t_con = threading.Thread(target=consumer_thread, args=(asr,), daemon=True)
+        t_cap.start()
+        # t_con.start()
+        try:
+            while not stop_flag.is_set():
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            stop_flag.set()
             print("\n\n[FIN] Streaming detenido.")
-            transcript_local = TRANSCRIPT_LOG
-    else:
-        wav_path = "Audios/Grabacion_Prueba_3min.m4a"
-        # print(os.path.exists(wav_path))
-        # wav_path = record_full_session(rec_duration_sec=15 * 60)  # ajusta duración
-        transcript_local = transcribe_full_session(asr, wav_path)
 
+        t_cap.join()
+            # t_con.join()
+        transcript_local = TRANSCRIPT_LOG
+    elif value == "2":  #Grabar la sesion completa
+        # wav_path = record_full_session(rec_duration_sec=15 * 60)  # grabacion por varios minutos completos
+        audio_file = audio.record_until_stop()
+        wav_path = audio.save_audio(audio_file)
+        transcript_local = transcribe_full_session(asr, wav_path)
+    else:  # Uso de Audio pre grabado
+        wav_path = "Audios/GrabacionPrueba_2.wav"
+        transcript_local = transcribe_full_session(asr, wav_path)
     print("Inicializando analisis via LLM")
-    llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
+    llm_model_name = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
     llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=300)
-    # llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+    llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
 
     print("Texto a transcribir:")
     print(str(transcript_local))
     finalize_session_and_save(llm_filler, clinical_filler, transcript_local)
-    print("Analisis Finalizado")
+    print("Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
+          "\nAlergias\nDiagnóstico\nReceta.")
 
 
 def prueba_llm():
     TRANSCRIPT_LOG =[' nuevamente comenzamos una', ' Comenzamos un nuevo modelo para paciente de nombre Adan cuya edad es de 33 años', ' 33 años peso de 83 kilogramos', ' altura es de uno 76 metros', ' Su tension arterial es de 120 sobre 80 y su frecuencia cardíaca es de 80.', 'la glucosa se encuentra en 40 y la temperatura corporea', ' la temperatura corporal en 36.5 grados centígrados su y', ' IMC se encuentra en rango normal de 24 IMC y el oxigen...', ' y el oxígeno en la sangre de 86%.']
     print("Inicializando analisis via LLM")
-    llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
+    # llm_model_name = "../HF_Agents/llama-2-7b-chat.Q5_K_M.gguf"
+    llm_model_name = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
     clinical_filler = ClinicalFormFiller()
-    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=600)
-    llm_filler.initialize(initial_prompt=EXTRACTION_PROMPT)
+    llm_filler = FieldCompleterEngine(llm_model_name, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
     print("Texto a transcribir:")
     print(str(TRANSCRIPT_LOG))
-    finalize_session_and_save(llm_filler, TRANSCRIPT_LOG)
-    print("Analisis Finalizado")
+    finalize_session_and_save(llm_filler, clinical_filler, TRANSCRIPT_LOG)
+    print("Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
+          "\nAlergias\nDiagnóstico\nReceta.")
 
 
 if __name__ == "__main__":

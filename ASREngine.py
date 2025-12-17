@@ -1,6 +1,4 @@
 import math
-from typing import Tuple
-# import whisper
 from faster_whisper import WhisperModel
 
 # Patrones clínicos mínimos de ejemplo (puedes ampliarlos luego)
