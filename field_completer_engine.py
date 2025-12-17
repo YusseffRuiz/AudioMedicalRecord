@@ -239,9 +239,11 @@ class FieldCompleterEngine:
         except Exception as e:
             print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
         # Habilitar para debugging
-        print("Respuesta LLM: ")
-        print(raw)
-        print("#################")
+        # print("Respuesta LLM: ")
+        # print(raw)
+        # print("#################")
+        # print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+        #       f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
         lines = raw.strip().splitlines()
         for line in lines:
             self.medical_filler.update(line, reg_flag=False)
