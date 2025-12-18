@@ -329,7 +329,6 @@ class FieldCompleterEngine:
             "- \"Diagnóstico: cefalea tensional aguda.\"\n"
             "- \"Receta: ibuprofeno 400 mg cada 8 horas por 3 días.\"\n\n"
             "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
-            "Al escribir números, usa el punto decimal para separar decimales."
         )
 
         # 4) Construir el INST con contexto
@@ -411,11 +410,11 @@ class FieldCompleterMistral(FieldCompleterEngine):
         except Exception as e:
             print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
         # Habilitar para debugging
-        print("Respuesta LLM: ")
-        print(raw)
-        print("#################")
-        print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
-              f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
+        # print("Respuesta LLM: ")
+        # print(raw)
+        # print("#################")
+        # print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+        #       f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
         lines = raw.strip().splitlines()
         for line in lines:
             self.medical_filler.update(line, reg_flag=False)

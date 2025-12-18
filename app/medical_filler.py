@@ -1,5 +1,6 @@
 import datetime
 import json
+import math
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict
 import re
@@ -95,7 +96,7 @@ class ClinicalFormFiller:
         # EDAD
         m = self._re_edad.search(s)
         if m:
-            edad = int(m.group(1))
+            edad = _to_int_safe(m.group(1))
             if 0 < edad < 120 and self.state.edad != edad:
                 self.state.edad = edad
                 changed["edad"] = edad
@@ -103,7 +104,7 @@ class ClinicalFormFiller:
         # PESO
         m = self._re_peso.search(s)
         if m:
-            kg = float(m.group(1))
+            kg = _to_float_num(m.group(1))
             if 1 <= kg <= 400 and self.state.peso_kg != kg:
                 self.state.peso_kg = kg
                 changed["peso_kg"] = kg
@@ -112,11 +113,11 @@ class ClinicalFormFiller:
         m = self._re_talla_m.search(s)
         talla_m = None
         if m:
-            talla_m = float(m.group("val"))
+            talla_m = _to_float_num(m.group("val"))
         else:
             m = self._re_talla_cm.search(s)
             if m:
-                cm = float(m.group("val"))
+                cm = _to_float_num(m.group("val"))
                 talla_m = cm / 100.0
 
         if talla_m and 0.5 <= talla_m <= 2.5 and self.state.talla_m != talla_m:
@@ -133,7 +134,7 @@ class ClinicalFormFiller:
         # TA
         m = self._re_ta.search(s)
         if m:
-            sis, dia = int(m.group(1)), int(m.group(2))
+            sis, dia = _to_int_safe(m.group(1)), _to_int_safe(m.group(2))
             if 60 <= sis <= 260 and 30 <= dia <= 160:
                 if self.state.ta_sis != sis:
                     self.state.ta_sis = sis
@@ -150,7 +151,7 @@ class ClinicalFormFiller:
         # FC
         m = self._re_fc.search(s)
         if m:
-            fc = int(m.group(1))
+            fc = _to_int_safe(m.group(1))
             if 20 <= fc <= 250 and self.state.fc_lpm != fc:
                 self.state.fc_lpm = fc
                 changed["fc_lpm"] = fc
@@ -158,7 +159,7 @@ class ClinicalFormFiller:
         # FR
         m = self._re_fr.search(s)
         if m:
-            fr = int(m.group(1))
+            fr = _to_int_safe(m.group(1))
             if 5 <= fr <= 80 and self.state.fr_rpm != fr:
                 self.state.fr_rpm = fr
                 changed["fr_rpm"] = fr
@@ -166,7 +167,7 @@ class ClinicalFormFiller:
         # SpO2
         m = self._re_spo2.search(s)
         if m:
-            spo2 = int(m.group(1))
+            spo2 = _to_int_safe(m.group(1))
             if 50 <= spo2 <= 100 and self.state.spo2_pct != spo2:
                 self.state.spo2_pct = spo2
                 changed["spo2_pct"] = spo2
@@ -174,7 +175,7 @@ class ClinicalFormFiller:
         # Temperatura
         m = self._re_temp.search(s)
         if m:
-            temp = float(m.group(1))
+            temp = _to_float_num(m.group(1))
             # Filtra valores plausibles humanos
             if 30.0 <= temp <= 45.0 and self.state.temp_c != temp:
                 self.state.temp_c = temp
@@ -183,8 +184,8 @@ class ClinicalFormFiller:
         # Glucosa
         m = self._re_gluc.search(s)
         if m:
-            gluc = int(m.group(1))
-            if 20.0 <= gluc <= 600.0 and self.state.gluc_mgdl != gluc:
+            gluc = _to_int_safe(m.group(1))
+            if 20 <= gluc <= 600 and self.state.gluc_mgdl != gluc:
                 self.state.gluc_mgdl = gluc
                 changed["gluc_mgdl"] = gluc
 
@@ -289,3 +290,13 @@ class ClinicalFormFiller:
         self.update(text)
 
         return self.snapshot()
+
+
+def _to_float_num(s: str) -> float:
+    return float(s.replace(",", "."))
+
+def _to_int_safe(s: str) -> int | None:
+    x = _to_float_num(s)
+    if math.isnan(x):
+        return None
+    return int(round(x))
