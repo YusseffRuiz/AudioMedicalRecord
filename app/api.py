@@ -66,6 +66,8 @@ class HISTORYMeta(BaseModel):
     asr_time: str
     llm_time: str
     processing_ms: str
+    input_tokens: int
+    output_tokens: int
     warnings: List[str] = []
 
 
@@ -362,6 +364,8 @@ async def process_audio_session(
         asr_time=f"{dt_transcript_s} s",
         llm_time=f"{dt_llm_s} s",
         processing_ms=f"{dt_total} s",
+        input_tokens=llm_filler.input_tokens,
+        output_tokens=llm_filler.output_tokens,
         warnings=[],
     )
 
