@@ -6,11 +6,11 @@ import queue
 import numpy as np
 import sounddevice as sd
 import torch
-
+from dotenv import load_dotenv
 
 from ASREngine import AsrEngine
 from medical_filler import ClinicalFormFiller
-from field_completer_engine import FieldCompleterEngine, FIELD_LABELS
+from field_completer_engine import FieldCompleterEngine, FIELD_LABELS, FieldCompleterMistral
 from audio_recording import AudioRecorder
 
 # ======= Configuración =======
@@ -29,6 +29,10 @@ DEVICE = 'cuda'if torch.cuda.is_available() else 'cpu'
 audio_file_path = "Audios/Grabacion_Prueba_3min.m4a"
 LLM_MODEL = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 AUDIO_SAVE_PATH = "_full_sessions"
+
+ENV_PATH = "tokens.env"
+load_dotenv(ENV_PATH)
+api_key_mistral = os.getenv("MISTRAL_KEY")
 
 # ======= Estado compartido =======
 audio_q: "queue.Queue[np.ndarray]" = queue.Queue()
@@ -252,10 +256,11 @@ def transcribe_full_session(asr_engine, wav_path: str) -> str:
 
 
 def main():
-    print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
+    print(f"[INFO] Cargando modelo Whisper ({MODEL_SIZE})… ")
     asr = AsrEngine(model_size=MODEL_SIZE, device=DEVICE)
     clinical_filler = ClinicalFormFiller()
     audio = AudioRecorder(path=AUDIO_SAVE_PATH, rate=RATE, channels=CHANNELS)
+    engine_num = int(input("Escribe 1 si quieres el engine local, Escribe 2, si quieres un proveedor externo"))
     # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
     value = str(input("Escribe 2 para grabar la sesion \nEscribe 3 para usar un audio pre grabado.\n"))
     wav_path = None
@@ -287,24 +292,52 @@ def main():
     t_1_transcript = time.time()
     t_transcript = t_1_transcript - t_0_transcript
 
-    print("Inicializando analisis via LLM")
-    llm_filler = FieldCompleterEngine(LLM_MODEL, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+    print("[INFO] Inicializando analisis via LLM")
+    if engine_num == 1:
+        llm_filler = FieldCompleterEngine(medical_filler=clinical_filler, max_tokens_per_chunk=1000, device=DEVICE)
+        llm_filler.initialize(model_name=LLM_MODEL)
+    else:
+        llm_filler = FieldCompleterMistral(medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+        llm_filler.initialize(api_key=api_key_mistral)
 
     t_0_process = time.time()
     finalize_session_and_save(llm_filler, clinical_filler, transcript_local)
     t_1_process = time.time()
     t_process = t_1_process - t_0_process
-    print("Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
+    print("[INFO] Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
           "\nAlergias\nDiagnóstico\nReceta.")
-    print(f"Time to transcript: {t_transcript} seconds")
-    print(f"Time to fill medical history: {t_process} seconds")
+    print(f"[INFO] Time to transcript: {t_transcript} seconds")
+    print(f"[INFO] Time to fill medical history: {t_process} seconds")
 
+
+def main_external_engine():
+    print(f"Cargando modelo Whisper ({MODEL_SIZE})… ")
+    asr = AsrEngine(model_size=MODEL_SIZE, device=DEVICE)
+    clinical_filler = ClinicalFormFiller()
+    wav_path = audio_file_path
+    t_0_transcript = time.time()
+    transcript_local = transcribe_full_session(asr, wav_path)
+    t_1_transcript = time.time()
+    t_transcript = t_1_transcript - t_0_transcript
+
+    print("[INFO] Inicializando analisis via LLM")
+    llm_filler = FieldCompleterMistral(medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+    llm_filler.initialize(api_key=api_key_mistral)
+
+    t_0_process = time.time()
+    finalize_session_and_save(llm_filler, clinical_filler, transcript_local)
+    t_1_process = time.time()
+    t_process = t_1_process - t_0_process
+    print("[INFO] Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
+          "\nAlergias\nDiagnóstico\nReceta.")
+    print(f"[INFO] Time to transcript: {t_transcript} seconds")
+    print(f"[INFO] Time to fill medical history: {t_process} seconds")
 
 def prueba_llm():
     TRANSCRIPT_LOG =[' nuevamente comenzamos una', ' Comenzamos un nuevo modelo para paciente de nombre Adan cuya edad es de 33 años', ' 33 años peso de 83 kilogramos', ' altura es de uno 76 metros', ' Su tension arterial es de 120 sobre 80 y su frecuencia cardíaca es de 80.', 'la glucosa se encuentra en 40 y la temperatura corporea', ' la temperatura corporal en 36.5 grados centígrados su y', ' IMC se encuentra en rango normal de 24 IMC y el oxigen...', ' y el oxígeno en la sangre de 86%.']
     print("Inicializando analisis via LLM")
     clinical_filler = ClinicalFormFiller()
-    llm_filler = FieldCompleterEngine(LLM_MODEL, medical_filler=clinical_filler, max_tokens_per_chunk=1000)
+    llm_filler = FieldCompleterMistral(medical_filler=clinical_filler, max_tokens_per_chunk=1000)
     print("Texto a transcribir:")
     print(str(TRANSCRIPT_LOG))
     finalize_session_and_save(llm_filler, clinical_filler, TRANSCRIPT_LOG)
@@ -313,5 +346,6 @@ def prueba_llm():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
     # prueba_llm()
+    main_external_engine()

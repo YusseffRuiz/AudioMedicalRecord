@@ -77,6 +77,10 @@ class ClinicalFormFiller:
         r"\b(?:diagn[oó]stico(?:\s+principal)?|impresi[oó]n\s+diagn[oó]stica)\s*[:\-]?\s*(?P<val>.+)$",
         re.I
     )
+    _re_receta = re.compile(
+        r"\b(?:[Rr]eceta|[Mm]edicamento?:s)\s*[:\-]?\s*(?P<val>.+)$",
+        re.I
+    )
     NO_CAND_RE = r"\b(no\s+se\s+especific[oó]|no\s+se\s+inform[oó]|no\s+se\s+menciona)\b"
 
     # Diagnóstico y receta se capturarán con métodos explícitos
@@ -185,6 +189,7 @@ class ClinicalFormFiller:
                 changed["gluc_mgdl"] = gluc
 
         if not reg_flag:
+            # Diagnostico
             m = self._re_diag.search(s)
             if m:
                 cand = m.group("val").strip(" .,-\"")
@@ -196,6 +201,18 @@ class ClinicalFormFiller:
                     elif cand.lower() not in self.state.diagnostico.lower():
                         self.state.diagnostico = f"{self.state.diagnostico}, {cand}"
                         changed["diagnostico"] = self.state.diagnostico
+            # Receta
+            m = self._re_receta.search(s)
+            if m:
+                cand = m.group("val").strip(" .,-\"")
+                # Si ya hay algo, une de forma única
+                if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                    if not self.state.receta:
+                        self.state.receta = cand
+                        changed["receta"] = cand
+                    elif cand.lower() not in self.state.receta.lower():
+                        self.state.receta = f"{self.state.receta}, {cand}"
+                        changed["receta"] = self.state.receta
 
             # Alergias
             if self._re_alerg_none.search(s):

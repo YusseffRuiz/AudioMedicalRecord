@@ -7,6 +7,8 @@ from typing import Dict, Any, List
 import tiktoken
 from llama_cpp import Llama
 
+from mistralai import Mistral
+
 # ---------------- Configuración de campos y rangos plausibles ----------------
 REQUIRED_FIELDS = [
     "edad", "peso_kg", "talla_m", "ta_sis", "ta_dia",
@@ -147,27 +149,23 @@ class FieldCompleterEngine:
     - Valida y fusiona resultados sin sobreescribir valores válidos existentes.
     """
     def __init__(self,
-                 model_name,
                  max_tokens_per_chunk: int = 800,
                  overlap_tokens: int = 50,
                  medical_filler = None,
-                 # device="cuda" if torch.cuda.is_available() else "cpu"):
                  device="cpu"):
         self.max_tokens = max_tokens_per_chunk
         self.overlap_tokens = overlap_tokens
         self.initial_prompt = None
         self.medical_filler = medical_filler
+        self.llm_model = None
+        self.device = device
 
 
-        # Verificar GPU solo si hay GPU, descomentar.
-        # cuda_available = torch.cuda.is_available()
-        cuda_available = False
-        # print("CUDA available:", cuda_available)
-
-        print("Initializing Model ...")
+    def initialize(self, model_name, initial_prompt=None):
+        cuda_available = True if self.device == "cuda" else False
         gpu_layers = 20
         max_tokens = 4096  # Menor a lo maximo para mayor velocidad
-        if cuda_available: # No hagamos mucho caso a todos los campos, estan para futuros deployments.
+        if cuda_available:  # No hagamos mucho caso a todos los campos, estan para futuros deployments.
             gpu_layers = 20
             config = {'max_new_tokens': 256, 'context_length': 1800, 'temperature': 0.45, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
@@ -184,11 +182,10 @@ class FieldCompleterEngine:
                                use_mlock=True,
                                verbose=False
                                )
-        print("Module Created!")
 
-    def initialize(self, initial_prompt):
-        # Se usa cuando se necesita crear un prompt inicial.
-        self.initial_prompt = initial_prompt
+        if initial_prompt is not None:  # Se usa cuando se necesita crear un prompt inicial.
+            self.initial_prompt = initial_prompt
+
 
     def build_llama2_prompt(self, context: str) -> str:
         # Plantilla oficial LLaMA-2 chat, uso basico para crear solo un prompt inicial
@@ -297,6 +294,7 @@ class FieldCompleterEngine:
             f"{campos_descripcion}\n\n"
             "Reglas importantes:\n"
             "- Usa valores numéricos con punto decimal cuando aplique (por ejemplo 36.5).\n"
+            "- Si lees en el apartado de talla/altura, algo como 76 metros, debe ser 1.76 metros\n"
             "- Usa unidades normalizadas tal como se describe en cada campo.\n"
             "- No cambies el significado clínico de los valores.\n"
             "- Si un campo no se puede deducir con certeza, NO lo menciones.\n"
@@ -351,3 +349,59 @@ class FieldCompleterEngine:
             k for k in REQUIRED_FIELDS
             if fields.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}
         ]
+
+class FieldCompleterMistral(FieldCompleterEngine):
+    def __init__(self, max_tokens_per_chunk: int = 800, overlap_tokens: int = 50, medical_filler=None,
+                 device="cpu"):
+        super().__init__(max_tokens_per_chunk, overlap_tokens, medical_filler, device)
+        self.completion_args = {
+            "temperature": 0.15,
+            "max_tokens": 4096,  # Uso aproximado maximo por sesion
+            "top_p": 1
+        }
+
+
+    def initialize(self, model_name=None, initial_prompt=None, api_key=None):
+        print("Initializing Model ...")
+        self.llm_model = Mistral(api_key=api_key)
+        print("Module Created!")
+
+    def _extract_from_chunk(self, chunk_text_str: str, missing_fields=None):
+
+        prompt = self.build_prompt_for_missing_fields(chunk_text_str, missing_fields=missing_fields)
+        error_cnt = 0
+        success = False
+        raw = None
+        inputs = [
+            {"role": "user", "content": f"{prompt}"}
+        ]
+        while not success:
+            try:
+                raw = self.llm_model.beta.conversations.start(
+                    inputs=inputs,
+                    model="mistral-small-latest",
+                    instructions="""""",
+                    completion_args=self.completion_args,
+                    tools=[],
+                )
+            except Exception as e:
+                print("[LLM ERROR]", repr(e))
+                error_cnt += 1
+            if raw is not None:
+                success = True
+            if error_cnt >= 5:
+                success = True
+                print("LLM Failed")
+        try:
+            raw = raw.outputs[0].content
+        except Exception as e:
+            print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
+        # Habilitar para debugging
+        print("Respuesta LLM: ")
+        print(raw)
+        print("#################")
+        print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+              f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
+        lines = raw.strip().splitlines()
+        for line in lines:
+            self.medical_filler.update(line, reg_flag=False)
