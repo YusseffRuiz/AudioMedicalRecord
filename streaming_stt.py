@@ -306,6 +306,7 @@ def main():
     t_process = t_1_process - t_0_process
     print("[INFO] Analisis Finalizado, Favor de SIEMPRE revisar, corroborar y corregir los apartados:"
           "\nAlergias\nDiagnóstico\nReceta.")
+    print(f"[INFO] Tokens de entrada: {llm_filler.input_tokens}, tokens de salida: {llm_filler.output_tokens}")
     print(f"[INFO] Time to transcript: {t_transcript} seconds")
     print(f"[INFO] Time to fill medical history: {t_process} seconds")
 

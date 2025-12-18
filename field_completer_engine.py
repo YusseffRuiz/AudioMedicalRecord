@@ -159,6 +159,8 @@ class FieldCompleterEngine:
         self.medical_filler = medical_filler
         self.llm_model = None
         self.device = device
+        self.input_tokens = 0
+        self.output_tokens = 0
 
 
     def initialize(self, model_name, initial_prompt=None):
@@ -239,7 +241,9 @@ class FieldCompleterEngine:
         # print("Respuesta LLM: ")
         # print(raw)
         # print("#################")
-        # print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+        self.input_tokens = count_tokens(prompt)
+        self.output_tokens = count_tokens(raw)
+        # print(f"Amount of entry tokens: {count_tokens(prompt)} tokens + output tokens {count_tokens(raw)} tokens "
         #       f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
         lines = raw.strip().splitlines()
         for line in lines:
