@@ -233,7 +233,6 @@ async def process_audio_session(
     session_id = str(uuid.uuid4().hex)[:4]  # Caben 65,536 requests
 
     # 0.5) Validar tipo de archivo
-    # 1) Validar tipo de archivo
     allowed_types = {
         "audio/m4a",
         "audio/mp4",
@@ -243,7 +242,7 @@ async def process_audio_session(
         raise HISTORYApiError(
             status_code=415,
             type="unsupported_media_type",
-            message= f"Formato no soportado: {file.content_type}. Use m4a, mp4, wav.",
+            message=f"Formato no soportado: {file.content_type}. Use m4a, mp4, wav.",
         )
 
     # 1) Guardar audio temporalmente
@@ -257,7 +256,7 @@ async def process_audio_session(
     text, conf, result = asr_engine.transcribe_file(str(tmp_path), language=language)
     t_1_transcript = time.time()
 
-    if len(text)==0:
+    if text is None:
         raise HISTORYApiError(
             type="transcription_error",
             message="No se pudo extraer texto del audio.",
