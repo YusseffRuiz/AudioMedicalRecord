@@ -327,7 +327,9 @@ async def process_audio_session(
     os.makedirs(out_dir, exist_ok=True)
     fname = f"historial_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_dir = os.path.join(out_dir, fname)
-    clinical_filler.save_json(str(out_dir), extras={"transcript": transcript_full})
+    clinical_filler.save_json(str(out_dir), extras={
+        "transcript": transcript_full,
+        "input_tokens:": llm_filler.input_tokens, "output_tokens:": llm_filler.output_tokens})
 
     # 4) Determinar campos faltantes (ignorando derivados)
     missing_labels = []
