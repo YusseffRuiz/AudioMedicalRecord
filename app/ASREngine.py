@@ -1,12 +1,11 @@
 import math
 import os
-# import whisper
 from faster_whisper import WhisperModel
 
 
 # Fuerza a CTranslate2 a ignorar CUDA incluso si está compilado con soporte GPU
 os.environ["CT2_FORCE_CPU"] = "1"
-os.environ.setdefault("OMP_NUM_THREADS", "4")  # opcional para no volarte todos los cores
+os.environ.setdefault("OMP_NUM_THREADS", "4")  # opcional para no volar todos los cores
 
 # Patrones clínicos mínimos de ejemplo (puedes ampliarlos luego)
 MED_PATTERNS = [

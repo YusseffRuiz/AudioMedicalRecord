@@ -1,4 +1,5 @@
 import os
+import queue
 import uuid
 
 import librosa
@@ -40,6 +41,50 @@ class AudioRecorder:
         sd.wait()
         print("Se acabó la grabación")
         return audio.flatten()
+
+    def record_until_stop(self):
+        """
+        Graba audio hasta que el usuario presiona ENTER o CTRL+C.
+        Devuelve la ruta del WAV generado.
+        """
+        audio_q = queue.Queue()
+        recording = True
+
+        def audio_callback(indata, frames, time_info, status):
+            # sobreescribimos un metodo, por tanto, se deben pasar las 4 inputs aunque no se usen
+            if status:
+                print(status)
+            audio_q.put(indata.copy())
+
+        print("\n[INFO] Presiona ENTER para COMENZAR la grabación.")
+        input()
+
+        print("[INFO] Grabando... Presiona ENTER para DETENER o CTRL+C para abortar.")
+
+        try:
+            with sd.InputStream(
+                    samplerate=self.rate,
+                    channels=self.channels,
+                    callback=audio_callback
+            ):
+                # Espera a que el usuario presione ENTER
+                input()
+        except KeyboardInterrupt:
+            print("\n[WARN] Grabación interrumpida por el usuario.")
+
+        print("[INFO] Deteniendo grabación y guardando archivo...")
+
+        # Extraer el audio acumulado
+        frames = []
+        while not audio_q.empty():
+            frames.append(audio_q.get())
+
+        if not frames:
+            raise RuntimeError("No se grabó audio.")
+
+        audio = np.concatenate(frames, axis=0)
+
+        return audio
 
     def save_audio(self, audio, sr=16000, path=None):
         if path is None:

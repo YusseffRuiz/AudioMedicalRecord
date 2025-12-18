@@ -37,7 +37,7 @@ class ClinicalFormFiller:
     _re_edad = re.compile(r"\b(?:edad\s*[:\-]?\s*)?(\d{1,3})\s*(?:años?|año)\b", re.I)
     _re_peso = re.compile(r"\b(?:peso\s*[:\-]?\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:kg|kilogramos?)\b", re.I)
     _re_talla_m = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*(m|metros|mt)\b",re.I)
-    _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d{2,3}(?:[.,]\d{1,2})?)\s*(?:cm|cent[ií]metros?)\b" ,re.I)
+    _re_talla_cm = re.compile(r"\b(?:(?:talla|altura|estatura)\s*[:\-]?\s*)?(?P<val>\d(?:[.,]\d{1,3})?)\s*cm\b",re.I)
     _re_ta = re.compile(
         r"\b(?:T/?A|TA|[tT]ensión\s*[aA]rterial)?\s*"  # 
         r"(?:[:\-]?\s*)?"  # separador 
@@ -47,14 +47,9 @@ class ClinicalFormFiller:
         r"(\d{2,3})\b",  # diastólica
         re.I
     )
-    _re_fc = re.compile(
-        r"\b(?:FC|frecuencia\s*card(?:i|í)aca)\b"  # FC o 'frecuencia cardiaca'
-        r"[^0-9]{0,12}"  # hasta 12 caracteres no numéricos (espacios, 'es de', 'de')
-        r"(\d{2,3})"  # valor 2–3 dígitos
-        r"(?:\s*(?:latidos\s+por\s+minuto|lpm|bpm))?",  # sufijo opcional
-        re.I
-    )
-    _re_fr = re.compile(r"\b(?:FR|[Ff]recuencia\s*[Rr]espiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
+    _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card[ií]aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
+    re.I)
+    _re_fr = re.compile(r"\b(?:FR|frecuencia\s*respiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
     re.I)
     _re_spo2 = re.compile(
         r"\b(?:SpO₂|SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
@@ -74,16 +69,25 @@ class ClinicalFormFiller:
     )
     _re_gluc = re.compile(r"\b(?:gluc(?:osa)?|glucemia)\s*(?:[:\-]?\s*)?(?:es\s+de\s+|de\s+|en\s+)?(\d{1,3}(?:[.,]\d+)?)\s*(?:mg/?dL|mgdL)?\b",
     re.I)
-    _re_alerg_none = re.compile(r"\b(sin\s+alerg(?:ias?|i[cs]o)|no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
-    _re_alerg = re.compile(r"\balerg(?:ias?)?\s*(?:a|:)\s*([A-Za-zÁÉÍÓÚÜÑáéíóúñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúñ]+)?)", re.I)
-    _re_diag = re.compile(r"\b(?:diagn[oó]stico(?:\s*es|\s*:)?)\s*(.*)", re.I)
-    _re_receta = re.compile(r"\breceta(?:\s*indicada|\s*es|\s*:)?\s*(.*)", re.I)
+    _re_alerg_none = re.compile(r"\b(no\s+(alergias?|al(?:e|é)rgico))\b", re.I)
+    _re_alerg = re.compile(
+        r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*[:\-]?\s*(?P<val>.+)$"
+        , re.I)
+    _re_diag = re.compile(
+        r"\b(?:diagn[oó]stico(?:\s+principal)?|impresi[oó]n\s+diagn[oó]stica)\s*[:\-]?\s*(?P<val>.+)$",
+        re.I
+    )
+    _re_receta = re.compile(
+        r"\b(?:[Rr]eceta|[Mm]edicamento?:s)\s*[:\-]?\s*(?P<val>.+)$",
+        re.I
+    )
+    NO_CAND_RE = r"\b(no\s+se\s+especific[oó]|no\s+se\s+inform[oó]|no\s+se\s+menciona)\b"
 
     # Diagnóstico y receta se capturarán con métodos explícitos
     def __init__(self):
         self.state = ClinicalFields()
 
-    def update(self, text: str) -> Dict[str, object]:
+    def update(self, text: str, reg_flag : bool =True) -> Dict[str, object]:
         """Procesa texto incremental y actualiza el estado. Devuelve sólo los campos que cambiaron."""
         changed: Dict[str, object] = {}
         s = text.strip()
@@ -155,7 +159,7 @@ class ClinicalFormFiller:
         m = self._re_fr.search(s)
         if m:
             fr = int(m.group(1))
-            if 20 <= fr <= 250 and self.state.fr_rpm != fr:
+            if 5 <= fr <= 80 and self.state.fr_rpm != fr:
                 self.state.fr_rpm = fr
                 changed["fr_rpm"] = fr
 
@@ -184,39 +188,49 @@ class ClinicalFormFiller:
                 self.state.gluc_mgdl = gluc
                 changed["gluc_mgdl"] = gluc
 
-        # Alergias
-        if self._re_alerg_none.search(s):
-            if self.state.alergias != "Ninguna":
-                self.state.alergias = "Ninguna"
-                changed["alergias"] = "Ninguna"
-        else:
-            m = self._re_alerg.search(s)
+        if not reg_flag:
+            # Diagnostico
+            m = self._re_diag.search(s)
             if m:
-                cand = m.group(1).strip(" .,-")
+                cand = m.group("val").strip(" .,-\"")
                 # Si ya hay algo, une de forma única
-                if cand:
-                    if not self.state.alergias:
-                        self.state.alergias = cand
-                        changed["alergias"] = cand
-                    elif cand.lower() not in self.state.alergias.lower():
-                        self.state.alergias = f"{self.state.alergias}, {cand}"
-                        changed["alergias"] = self.state.alergias
+                if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                    if not self.state.diagnostico:
+                        self.state.diagnostico = cand
+                        changed["diagnostico"] = cand
+                    elif cand.lower() not in self.state.diagnostico.lower():
+                        self.state.diagnostico = f"{self.state.diagnostico}, {cand}"
+                        changed["diagnostico"] = self.state.diagnostico
+            # Receta
+            m = self._re_receta.search(s)
+            if m:
+                cand = m.group("val").strip(" .,-\"")
+                # Si ya hay algo, une de forma única
+                if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                    if not self.state.receta:
+                        self.state.receta = cand
+                        changed["receta"] = cand
+                    elif cand.lower() not in self.state.receta.lower():
+                        self.state.receta = f"{self.state.receta}, {cand}"
+                        changed["receta"] = self.state.receta
 
-        m = self._re_diag.search(s)
-        if m:
-            diag = m.group(1).strip(" .,-")
-            if diag:
-                value = self._clean_diag_or_receta(diag)
-                self.state.diagnostico = value
-                changed["diagnostico"] = value
-
-        m = self._re_receta.search(s)
-        if m:
-            rec = m.group(1).strip(" .,-")
-            if rec:
-                value = self._clean_diag_or_receta(rec)
-                self.state.receta = value
-                changed["receta"] = value
+            # Alergias
+            if self._re_alerg_none.search(s):
+                if self.state.alergias != "Ninguna":
+                    self.state.alergias = "Ninguna"
+                    changed["alergias"] = "Ninguna"
+            else:
+                m = self._re_alerg.search(s)
+                if m:
+                    cand = m.group("val").strip(" .,-\"")
+                    # Si ya hay algo, une de forma única
+                    if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                        if not self.state.alergias:
+                            self.state.alergias = cand
+                            changed["alergias"] = cand
+                        elif cand.lower() not in self.state.alergias.lower():
+                            self.state.alergias = f"{self.state.alergias}, {cand}"
+                            changed["alergias"] = self.state.alergias
 
         return changed
 
@@ -275,50 +289,3 @@ class ClinicalFormFiller:
         self.update(text)
 
         return self.snapshot()
-    @staticmethod
-    def _clean_diag_or_receta(text: str, max_chars: int = 120) -> str:
-        """
-        Limpia diagnóstico/receta:
-        - quita preguntas y cierres de conversación,
-        - limita longitud,
-        - corta en la primera oración razonable.
-        """
-        if not text:
-            return text
-
-        t = text.strip()
-
-        # 1) Cortar desde ciertas frases típicas de cierre
-        cortes = [
-            "¿Con esto terminamos",
-            "Con esto terminamos",
-            "Con esto.",
-            "¿Alguna duda",
-            "¿Algo más que quiera revisar",
-            "Muchas gracias",
-            "muchas gracias",
-            "buen día",
-            "buen dia",
-        ]
-        for marker in cortes:
-            idx = t.find(marker)
-            if idx != -1:
-                t = t[:idx].strip()
-                break
-
-        # 2) Opcional: cortar en el primer signo de interrogación
-        q_idx = t.find("¿")
-        if q_idx > 0:
-            t = t[:q_idx].strip()
-
-        # 3) Limitar longitud total
-        if len(t) > max_chars:
-            t = t[:max_chars]
-            # evitar cortar a media palabra
-            t = t.rsplit(" ", 1)[0].strip()
-
-        # 4) Asegurar que termina más o menos decente
-        if t and t[-1] not in ".;":
-            t = t + "."
-
-        return t

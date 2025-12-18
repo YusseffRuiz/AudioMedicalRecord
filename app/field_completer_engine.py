@@ -3,10 +3,11 @@
 # - Envía cada chunk a un LLM con un prompt de extracción JSON estricto.
 # - Valida rangos y fusiona resultados.
 import os
-from typing import Dict, Any, List
+from typing import List
 import tiktoken
-# import torch
-from langchain_community.llms.ctransformers import CTransformers
+from llama_cpp import Llama
+
+from mistralai import Mistral
 
 # ---------------- Configuración de campos y rangos plausibles ----------------
 REQUIRED_FIELDS = [
@@ -30,7 +31,7 @@ FIELD_META = {
                     "desc": "talla/altura en metros (float, por ejemplo 1.76)",
                     "example": "La talla es de 1.76 metros.",
                    },
-    "t_a":        {"label": "Tensión arterial",
+    "t_a":      {"label": "Tensión arterial",
                     "desc": "tensión arterial en mmHg (entero en forma X,Y, mmHg)",
                     "example": "La presión arterial es de 120 sobre 80",
                   },
@@ -148,51 +149,50 @@ class FieldCompleterEngine:
     - Valida y fusiona resultados sin sobreescribir valores válidos existentes.
     """
     def __init__(self,
-                 model_name,
                  max_tokens_per_chunk: int = 800,
                  overlap_tokens: int = 50,
                  medical_filler = None,
-                 # device="cuda" if torch.cuda.is_available() else "cpu"):
                  device="cpu"):
         self.max_tokens = max_tokens_per_chunk
         self.overlap_tokens = overlap_tokens
         self.initial_prompt = None
         self.medical_filler = medical_filler
+        self.llm_model = None
+        self.device = device
 
 
-        # Verificar GPU solo si hay GPU, descomentar.
-        # cuda_available = torch.cuda.is_available()
-        cuda_available = False
-        # print("CUDA available:", cuda_available)
-
-        # print("Initializing Model ...")
-        gpu_layers = 0
-        config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
-                  "threads": os.cpu_count()}
-        if cuda_available:
-            gpu_layers = 16
-            config = {'max_new_tokens': 140, 'context_length': 1900, 'temperature': 0.35, "gpu_layers": gpu_layers,
+    def initialize(self, model_name, initial_prompt=None):
+        cuda_available = True if self.device == "cuda" else False
+        gpu_layers = 20
+        max_tokens = 4096  # Menor a lo maximo para mayor velocidad
+        if cuda_available:  # No hagamos mucho caso a todos los campos, estan para futuros deployments.
+            gpu_layers = 20
+            config = {'max_new_tokens': 256, 'context_length': 1800, 'temperature': 0.45, "gpu_layers": gpu_layers,
                       "threads": os.cpu_count()}
+        else:
+            config = {'max_new_tokens': 256, 'context_length': 1800, 'temperature': 0.45, "threads": os.cpu_count()}
 
-        # self.llm_model = None
-        self.llm_model = CTransformers(
-            model=model_name,
-            model_type="llama",
-            config=config,
-            verbose=False,
-        )
-        print("Module Created!")
+        self.llm_model = Llama(model_path=model_name,
+                               n_ctx=max_tokens,
+                               # The max sequence length to use - note that longer sequence lengths require much more resources
+                               n_threads=config["threads"],
+                               # The number of CPU threads to use, tailor to your system and the resulting performance
+                               n_gpu_layers=gpu_layers,
+                               temperature=config["temperature"],
+                               use_mlock=True,
+                               verbose=False
+                               )
 
-    def initialize(self, initial_prompt):
-        # Se usa cuando se necesita crear un prompt inicial.
-        self.initial_prompt = initial_prompt
+        if initial_prompt is not None:  # Se usa cuando se necesita crear un prompt inicial.
+            self.initial_prompt = initial_prompt
+
 
     def build_llama2_prompt(self, context: str) -> str:
         # Plantilla oficial LLaMA-2 chat, uso basico para crear solo un prompt inicial
         return (
             f"[INST] <<SYS>>\n{self.initial_prompt}\n<</SYS>>\n\n"
             f"# CONTEXTO\n{context}\n\n"
-            "# PREGUNTA\nExtrae los campos desde el contexto en el formato especificado. Si no hay ninguno, devuelve {{}}.\n[/INST]"
+            "# PREGUNTA\nExtrae los campos desde el contexto. Si no hay ninguno, devuelve {{}}.\n[/INST]"
         )
 
     @staticmethod
@@ -216,7 +216,13 @@ class FieldCompleterEngine:
         raw = None
         while not success:
             try:
-                raw = self.llm_model.invoke(prompt)
+                raw = self.llm_model(
+                    prompt=prompt,
+                    stop=["</s>"],
+                    max_tokens=512,
+                    echo=False,
+                    stream=False
+                )
             except Exception as e:
                 print("[LLM ERROR]", repr(e))
                 error_cnt += 1
@@ -225,12 +231,19 @@ class FieldCompleterEngine:
             if error_cnt >= 5:
                 success = True
                 print("LLM Failed")
-        # Habilitar para debugging de la respuesta del LLM
-        print("Respuesta LLM: ")
-        print(raw)
+        try:
+            raw = raw["choices"][0]["text"].strip()
+        except Exception as e:
+            print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
+        # Habilitar para debugging
+        # print("Respuesta LLM: ")
+        # print(raw)
+        # print("#################")
+        # print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+        #       f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
         lines = raw.strip().splitlines()
         for line in lines:
-            self.medical_filler.update(line)
+            self.medical_filler.update(line, reg_flag=False)
 
     def complete_fields(self, transcript: str, missing_fields: list[str]):
         """
@@ -241,7 +254,6 @@ class FieldCompleterEngine:
 
         chunks = chunk_text(transcript, max_tokens=self.max_tokens, overlap_tokens=self.overlap_tokens)
         for ch in chunks:
-            # print(ch) # solo para debugging de analisis del texto transcrito
             self._extract_from_chunk(ch, missing_fields)
 
     @staticmethod
@@ -268,53 +280,42 @@ class FieldCompleterEngine:
             meta = FIELD_META.get(key)
             if not meta:
                 continue
-            # lines_desc.append(f"- {meta['label']} : {meta['desc']} - Ejemplo: {meta['example']}")
-            lines_desc.append(f"- {meta['label']}")
+            lines_desc.append(f"- {meta['label']} : {meta['desc']} - Ejemplo: {meta['example']}")
 
         campos_descripcion = "\n".join(lines_desc)
 
         # 2) Instrucciones base (puedes ajustar para aligerar tokens si hace falta)
         sys_instructions = (
-            "Eres un extractor clínico muy estricto en español.\n"
-            "Tu única tarea es leer la transcripción de una consulta médica y escribir "
-            "solo los campos clínicos que se te pidan, en el formato EXACTO:\n"
-            "Campo: valor\n\n"
-            "Reglas OBLIGATORIAS:\n"
-            "1) Responde solo con una línea por campo faltante.\n"
-            "2) Cada línea debe seguir exactamente el formato: 'Campo: valor'.\n"
-            "3) NO uses viñetas, NO uses comillas, NO expliques nada, NO agregues texto antes ni después.\n"
-            "4) Usa exactamente los nombres de campo indicados (misma ortografía y mayúsculas).\n"
-            "5) No escribas saludos, despedidas, preguntas ni texto de conversación.\n"
-            "6) Si un campo no se puede deducir con certeza del contexto, NO lo escribas.\n"
-            "7) Para campos numéricos usa números árabes y punto decimal cuando aplique (ej. 36.5).\n"
-            "8) Para Diagnóstico y Receta usa UNA sola oración clínica corta (máximo 20 palabras), "
-            "solo con la información médica principal.\n"
-            "9) NO copies frases de conversación como '¿Con esto terminamos?', '¿Alguna duda?', "
-            "'Muchas gracias', 'buen día', ni preguntas al paciente.\n"
-            "10) Si el texto original incluye esas frases, IGNÓRALAS. "
-            "El diagnóstico debe ser algo como 'cefalea tensional aguda' y la receta algo como "
-            "'ibuprofeno 400 mg cada 8 horas por 3 días'.\n"
-            "10) No repitas la misma información en más de un campo.\n\n"
-            "Campos faltantes (solo estos te interesan):\n"
-            f"{campos_descripcion}\n"
+            "Eres un extractor clínico estricto en español. "
+            "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta. "
+            "Solo te interesan los campos listados, y debes ser conservador: "
+            "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n\n"
+            "Lista de CAMBIOS que debes reportar (solo los campos faltantes) y SOLAMENTE en el formato indicado:\n"
+            f"{campos_descripcion}\n\n"
+            "Reglas importantes:\n"
+            "- Usa valores numéricos con punto decimal cuando aplique (por ejemplo 36.5).\n"
+            "- Si lees en el apartado de talla/altura, algo como 76 metros, debe ser 1.76 metros\n"
+            "- Usa unidades normalizadas tal como se describe en cada campo.\n"
+            "- No cambies el significado clínico de los valores.\n"
+            "- Si un campo no se puede deducir con certeza, NO lo menciones.\n"
+            "- Responde en el formato mencionado, sin alterar o agregar a la frase, solo una lista.\n"
         )
 
         # 3) Ejemplos orientados a regex
         ejemplos = (
-            "Ejemplos de formato EXACTO (no agregues nada más):\n"
-            "Edad: 33\n"
-            "Peso: 82.0 kg\n"
-            "Talla: 1.76 m\n"
-            "Tensión arterial: 120, 80 mmHg\n"
-            "Frecuencia cardíaca: 80 lpm\n"
-            "Frecuencia respiratoria: 16 rpm\n"
-            "SpO₂: 97 %\n"
-            "Temperatura: 36.7 grados\n"
-            "Glucosa: 90 mg/dL\n"
-            "Alergias: ninguna\n"
-            "Diagnóstico: cefalea tensional aguda\n"
-            "Receta: ibuprofeno 400 mg cada 8 horas por 3 días\n\n"
-            "Si en el texto no hay información suficiente para algún campo, NO escribas esa línea.\n"
+            "Formato deseado:\n"
+            "- \"tension arterial: 120, 80 mmHg\"\n"
+            "- \"frecuencia cardiaca:78 lpm\"\n"
+            "- \"Talla: 1.76 m\"\n"
+            "- \"frecuencia respiratoria:68 rpm\"\n"
+            "- \"spO2:97 %\"\n"
+            "- \"Peso: 82 kg\"\n"
+            "- \"Temperatura: 36.7 grados.\"\n"
+            "- \"Glucosa: 90 mg/dL.\"\n"
+            "- \"Alergias: penicilina.\"\n"
+            "- \"Diagnóstico: cefalea tensional aguda.\"\n"
+            "- \"Receta: ibuprofeno 400 mg cada 8 horas por 3 días.\"\n\n"
+            "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
         )
 
         # 4) Construir el INST con contexto
@@ -330,9 +331,8 @@ class FieldCompleterEngine:
             "# CONTEXTO CLÍNICO\n"
             f"{transcript}\n"
             "# TAREA\n"
-            f"Con base en el contexto clínico anterior, escribe SOLO las líneas de los campos faltantes: {campos_str}.\n"
-            "Respeta estrictamente el formato 'Campo: valor' para cada línea. "
-            "No escribas nada fuera de esas líneas.\n"
+            f"Con base en el contexto clínico anterior, menciona únicamente la información clara "
+            f"relacionada con los siguientes campos faltantes: {campos_str}.\n"
             "[/INST]"
         )
         # print("Tokens: ", count_tokens(prompt))
@@ -349,3 +349,59 @@ class FieldCompleterEngine:
             k for k in REQUIRED_FIELDS
             if fields.get(k) in (None, "", 0) and k not in {"imc", "tam_map"}
         ]
+
+class FieldCompleterMistral(FieldCompleterEngine):
+    def __init__(self, max_tokens_per_chunk: int = 800, overlap_tokens: int = 50, medical_filler=None,
+                 device="cpu"):
+        super().__init__(max_tokens_per_chunk, overlap_tokens, medical_filler, device)
+        self.completion_args = {
+            "temperature": 0.15,
+            "max_tokens": 4096,  # Uso aproximado maximo por sesion
+            "top_p": 1
+        }
+
+
+    def initialize(self, model_name=None, initial_prompt=None, api_key=None):
+        print("Initializing Model ...")
+        self.llm_model = Mistral(api_key=api_key)
+        print("Module Created!")
+
+    def _extract_from_chunk(self, chunk_text_str: str, missing_fields=None):
+
+        prompt = self.build_prompt_for_missing_fields(chunk_text_str, missing_fields=missing_fields)
+        error_cnt = 0
+        success = False
+        raw = None
+        inputs = [
+            {"role": "user", "content": f"{prompt}"}
+        ]
+        while not success:
+            try:
+                raw = self.llm_model.beta.conversations.start(
+                    inputs=inputs,
+                    model="mistral-small-latest",
+                    instructions="""""",
+                    completion_args=self.completion_args,
+                    tools=[],
+                )
+            except Exception as e:
+                print("[LLM ERROR]", repr(e))
+                error_cnt += 1
+            if raw is not None:
+                success = True
+            if error_cnt >= 5:
+                success = True
+                print("LLM Failed")
+        try:
+            raw = raw.outputs[0].content
+        except Exception as e:
+            print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
+        # Habilitar para debugging
+        print("Respuesta LLM: ")
+        print(raw)
+        print("#################")
+        print(f"Amount of used tokens: {count_tokens(prompt)+count_tokens(raw)} tokens "
+              f"= aprox {4*(count_tokens(prompt)+count_tokens(raw))} words")
+        lines = raw.strip().splitlines()
+        for line in lines:
+            self.medical_filler.update(line, reg_flag=False)
