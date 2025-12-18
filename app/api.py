@@ -105,6 +105,33 @@ clinical_filler = ClinicalFormFiller()
 llm_filler = FieldCompleterMistral(medical_filler=clinical_filler, max_tokens_per_chunk=1000)
 llm_filler.initialize(api_key=api_key)
 
+# ---------------- Helper methods ---------------------
+
+def process_transcript_with_regex_and_llm(llm_model, form_filler, transcript_full: str) -> tuple[dict, list[str]]:
+    """
+    Devuelve:
+      - fields_final: dict con campos clínicos
+      - missing_final: lista de campos que faltan al final
+      - llm_text: texto bruto que devolvió el LLM (para debug)
+    """
+
+    # --- PASADA 1: REGEX directo ---
+    fields_1 = form_filler.extract_with_regex(transcript_full)
+    missing_1 = llm_model.compute_missing(fields_1)
+
+    if not missing_1:
+        # No necesitamos LLM
+        return fields_1, []
+
+    # --- PASADA 2: LLM SOLO para campos faltantes ---
+    llm_model.complete_fields(transcript_full, missing_1)
+
+    fields_final = form_filler.snapshot()
+    missing_final = llm_model.compute_missing(fields_final)
+
+    return fields_final, missing_final
+
+
 # -----------------Error Handling ---------------------
 logger = logging.getLogger("history_api")
 
@@ -164,7 +191,6 @@ async def generic_error_handler(request: Request, exc: Exception):
 
 # ----------------- Endpoint principal -----------------
 
-
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
@@ -198,33 +224,6 @@ async def readyz():
         500: {"model": HISTORYErrorResponse},
     },
 )
-
-def process_transcript_with_regex_and_llm(llm_model, form_filler, transcript_full: str) -> tuple[dict, list[str]]:
-    """
-    Devuelve:
-      - fields_final: dict con campos clínicos
-      - missing_final: lista de campos que faltan al final
-      - llm_text: texto bruto que devolvió el LLM (para debug)
-    """
-
-    # --- PASADA 1: REGEX directo ---
-    fields_1 = form_filler.extract_with_regex(transcript_full)
-    missing_1 = llm_model.compute_missing(fields_1)
-
-    if not missing_1:
-        # No necesitamos LLM
-        return fields_1, []
-
-    # --- PASADA 2: LLM SOLO para campos faltantes ---
-    llm_model.complete_fields(transcript_full, missing_1)
-
-    fields_final = form_filler.snapshot()
-    missing_final = llm_model.compute_missing(fields_final)
-
-    return fields_final, missing_final
-
-
-@app.post("/api/v1/process_audio_session")
 async def process_audio_session(
     file: UploadFile = File(...),
     patient_id: str | None = Form(None),
