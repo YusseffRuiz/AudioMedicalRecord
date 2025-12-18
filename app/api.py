@@ -57,7 +57,7 @@ class HISTORYData(BaseModel):
     session_id: Optional[str] = None
     transcript: Optional[str] = None
     clinical_fields: Optional[Dict] = None
-    missing_fields: Optional[LiteralString] = None
+    missing_fields: Optional[str] = None
     recommendations: Optional[str] = None # En desarrollo
     date: Optional[str] = None
 
@@ -240,12 +240,10 @@ async def process_audio_session(
         "audio/wav",
     }
     if file.content_type not in allowed_types:
-        raise HTTPException(
+        raise HISTORYApiError(
             status_code=415,
-            detail={
-                "type": "unsupported_media_type",
-                "message": f"Formato no soportado: {file.content_type}. Use m4a, mp4, wav.",
-            },
+            type="unsupported_media_type",
+            message= f"Formato no soportado: {file.content_type}. Use m4a, mp4, wav.",
         )
 
     # 1) Guardar audio temporalmente
