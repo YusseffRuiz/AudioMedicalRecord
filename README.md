@@ -209,6 +209,20 @@ Sesión completa:
 
 📦 Salida del sistema
 
+Pasos para llamada a la API:
+ 
+    curl.exe -X GET "/healthz"                                                                  
+        Output:
+        {"status":"ok"}
+    curl.exe -X GET "/readyz" 
+        Ouptut:
+        {"status":"ok","components":{"asr_engine":{"ok":true,"detail":"loaded"},"llm_model":{"ok":true,"detail":"initialized"}}}
+    curl.exe -X POST "/api/v1/process_audio_session" -F "file=@Audios/Grabacion_Prueba_3min.m4a" -F "patient_id=123"
+        Output:
+        {"status":"ok","data":{"patient_id":null,"session_id":"d3dd","transcript":null,"clinical_fields":{"edad":33,"peso_kg":83.0,"talla_m":1.76,"imc":26.8,"ta_sis":120,"ta_dia":80,"tam_map":93,"fc_lpm":80,"fr_rpm":6,"spo2_pct":97,"temp_c":36.7,"gluc_mgdl":40,"alergias":"sin alergias conocidas","diagnostico":"cefalea tensional aguda","receta":"ibuprofeno 400 miligramos, aplicar calor local en cuello y hombros, hidratación adecuada, dormir por lo menos 7 horas"},"missing_fields":"","recommendations":"⚠️ En desarrollo...","date":"2025-12-18 12:33:49.950816"},"meta":{"whisper_model":"small","asr_time":"22 s","llm_time":"1 s","processing_ms":"23.940582752227783 s","warnings":[]}}
+
+
+
 Cada consulta genera en _historiales/ un archivo:
 
 historial_YYYYMMDD_HHMMSS.json
@@ -242,7 +256,6 @@ Ejemplo:
 
 ## **Próximos pasos:**
 
-* Afinar prompt del LLM con ejemplos reales
 * Integrar con navegador (autollenado con Selenium/Playwright/Extension)
 * Probar con médicos reales
 * Ajustar regex según estilo de dictado real
