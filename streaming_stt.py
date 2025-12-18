@@ -62,7 +62,9 @@ def finalize_session_and_save(llm_model, clinical_filler, transcript_full: list[
     os.makedirs(out_dir, exist_ok=True)
     fname = f"historial_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_dir = os.path.join(out_dir, fname)
-    clinical_filler.save_json(str(out_dir), extras={"transcript": transcript_full})
+    clinical_filler.save_json(str(out_dir), extras={
+        "transcript": transcript_full,
+        "input_tokens:": llm_model.input_tokens, "output_tokens:": llm_model.output_tokens})
 
     # 4) mensaje de faltantes (si los hay)
 
