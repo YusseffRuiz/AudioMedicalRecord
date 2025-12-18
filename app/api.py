@@ -1,3 +1,5 @@
+import uuid
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -66,9 +68,9 @@ def process_transcript_with_regex_and_llm(llm_model, form_filler, transcript_ful
 async def process_audio_session(
     file: UploadFile = File(...),
     patient_id: str | None = Form(None),
-    session_id: str | None = Form(None),
     language: str = Form("es"),
 ):
+    session_id = str(uuid.uuid4().hex)[:4]  # Caben 65,536 requests
 
     # 1) Guardar audio temporalmente
     suffix = Path(file.filename).suffix or ".wav"

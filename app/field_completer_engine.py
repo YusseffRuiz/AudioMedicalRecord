@@ -5,9 +5,11 @@
 import os
 from typing import List
 import tiktoken
-from llama_cpp import Llama
+# from llama_cpp import Llama
 
 from mistralai import Mistral
+from langchain_community.llms.ctransformers import CTransformers
+
 
 # ---------------- Configuración de campos y rangos plausibles ----------------
 REQUIRED_FIELDS = [
@@ -163,8 +165,8 @@ class FieldCompleterEngine:
 
     def initialize(self, model_name, initial_prompt=None):
         cuda_available = True if self.device == "cuda" else False
-        gpu_layers = 20
-        max_tokens = 4096  # Menor a lo maximo para mayor velocidad
+        # gpu_layers = 20
+        # max_tokens = 4096  # Menor a lo maximo para mayor velocidad
         if cuda_available:  # No hagamos mucho caso a todos los campos, estan para futuros deployments.
             gpu_layers = 20
             config = {'max_new_tokens': 256, 'context_length': 1800, 'temperature': 0.45, "gpu_layers": gpu_layers,
@@ -172,6 +174,7 @@ class FieldCompleterEngine:
         else:
             config = {'max_new_tokens': 256, 'context_length': 1800, 'temperature': 0.45, "threads": os.cpu_count()}
 
+        """ # Uncomment when getting own GPU
         self.llm_model = Llama(model_path=model_name,
                                n_ctx=max_tokens,
                                # The max sequence length to use - note that longer sequence lengths require much more resources
@@ -182,6 +185,14 @@ class FieldCompleterEngine:
                                use_mlock=True,
                                verbose=False
                                )
+        """
+        self.llm_model = CTransformers(
+            model=model_name,
+            model_type="llama",
+            config=config,
+            verbose=False,
+        )
+        print("Module Created!")
 
         if initial_prompt is not None:  # Se usa cuando se necesita crear un prompt inicial.
             self.initial_prompt = initial_prompt
@@ -216,13 +227,15 @@ class FieldCompleterEngine:
         raw = None
         while not success:
             try:
+                raw = self.llm_model.invoke(prompt)
+                """ ## Uncomment when getting own GPU
                 raw = self.llm_model(
                     prompt=prompt,
                     stop=["</s>"],
                     max_tokens=512,
                     echo=False,
                     stream=False
-                )
+                )"""
             except Exception as e:
                 print("[LLM ERROR]", repr(e))
                 error_cnt += 1
@@ -231,10 +244,10 @@ class FieldCompleterEngine:
             if error_cnt >= 5:
                 success = True
                 print("LLM Failed")
-        try:
-            raw = raw["choices"][0]["text"].strip()
-        except Exception as e:
-            print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
+        # try:
+        #     raw = raw["choices"][0]["text"].strip()
+        # except Exception as e:
+        #     print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
         # Habilitar para debugging
         # print("Respuesta LLM: ")
         # print(raw)
