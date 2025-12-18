@@ -3,7 +3,7 @@
 # - Envía cada chunk a un LLM con un prompt de extracción JSON estricto.
 # - Valida rangos y fusiona resultados.
 import os
-from typing import List
+from typing import Dict, Any, List
 import tiktoken
 from llama_cpp import Llama
 

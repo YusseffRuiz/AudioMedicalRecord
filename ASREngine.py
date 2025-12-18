@@ -1,11 +1,5 @@
 import math
-import os
 from faster_whisper import WhisperModel
-
-
-# Fuerza a CTranslate2 a ignorar CUDA incluso si está compilado con soporte GPU
-os.environ["CT2_FORCE_CPU"] = "1"
-os.environ.setdefault("OMP_NUM_THREADS", "4")  # opcional para no volar todos los cores
 
 # Patrones clínicos mínimos de ejemplo (puedes ampliarlos luego)
 MED_PATTERNS = [
@@ -23,7 +17,7 @@ class AsrEngine:
         """
         # compute_type "int8_float16" funciona bien en CPU modernas; en GPU puedes usar "float16"
         # self.model = whisper.load_model(model_size, device=device)
-        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        self.model = WhisperModel(model_size, device=device, compute_type="int8")
 
 
     def transcribe_file(self, audio: str, language: str = "es", fp16=False, without_timestamps=True
@@ -38,14 +32,12 @@ class AsrEngine:
         # )
         segments, info = self.model.transcribe(audio,
             language=language,
-            without_timestamps=without_timestamps, beam_size=1, best_of=1,
-                                               vad_filter=True, word_timestamps=False)
-
+            without_timestamps=without_timestamps)
 
         # Materializar el generador
         segments_list = list(segments)
         # Concatenar texto
-        text = "".join(seg.text.strip() for seg in segments_list)
+        text = " ".join(seg.text.strip() for seg in segments_list)
 
         # Confianza aproximada a partir de avg_logprob
         logps = [seg.avg_logprob for seg in segments if seg.avg_logprob is not None]
