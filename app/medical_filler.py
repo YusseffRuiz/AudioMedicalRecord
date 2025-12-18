@@ -50,8 +50,13 @@ class ClinicalFormFiller:
     )
     _re_fc = re.compile(r"\b(?:FC|frecuencia\s*card[ií]aca)\s*(?:[:\-]?\s*)?(\d{1,3})\s*(?:lpm|bpm)?\b",
     re.I)
-    _re_fr = re.compile(r"\b(?:FR|frecuencia\s*respiratoria)\s*(?:[:\-]?\s*)?(\d{1,2})\s*(?:rpm|respiraciones\s*por\s*minuto)?\b",
-    re.I)
+    _re_fr = re.compile(
+        r"\b(?:FR|frecuencia\s*respiratoria|respiraciones?)\b"
+        r"(?:\s*(?:[:\-]|es\s*de)?\s*)"
+        r"(?P<val>\d{1,3}(?:[.,]\d+)?)"
+        r"(?:\s*(?:rpm|r\/m|resp(?:iraciones?)?\s*(?:por|min|x)\s*min(?:uto)?s?))?\b",
+        re.I
+    )
     _re_spo2 = re.compile(
         r"\b(?:SpO₂|SpO2|Sp02|saturaci(?:o|ó)n(?:\s*de\s*ox[ií]geno)?"  # SpO2 / saturación / saturación de oxígeno
         r"|ox[ií]geno(?:\s*en\s*la\s*sangre)?)\s*"  # oxígeno / oxígeno en sangre
@@ -159,8 +164,8 @@ class ClinicalFormFiller:
         # FR
         m = self._re_fr.search(s)
         if m:
-            fr = _to_int_safe(m.group(1))
-            if 5 <= fr <= 80 and self.state.fr_rpm != fr:
+            fr = _to_int_safe(m.group("val"))
+            if fr is not None and 5 <= fr <= 80:
                 self.state.fr_rpm = fr
                 changed["fr_rpm"] = fr
 
