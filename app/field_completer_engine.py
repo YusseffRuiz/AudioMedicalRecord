@@ -329,6 +329,7 @@ class FieldCompleterEngine:
             "- \"Diagnóstico: cefalea tensional aguda.\"\n"
             "- \"Receta: ibuprofeno 400 mg cada 8 horas por 3 días.\"\n\n"
             "Si en el texto no hay información suficiente para algún campo, simplemente no lo menciones.\n"
+            "Al escribir números, usa el punto decimal para separar decimales."
         )
 
         # 4) Construir el INST con contexto
