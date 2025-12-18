@@ -56,7 +56,7 @@ def finalize_session_and_save(llm_model, clinical_filler, transcript_full: list[
 
 
     # 3) guardar JSON de historial + transcript
-    # print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True) # Forma ya llenada con el LLM.
+    print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True) # Forma ya llenada con el LLM.
 
     out_dir = "_historiales"
     os.makedirs(out_dir, exist_ok=True)
@@ -260,7 +260,7 @@ def main():
     asr = AsrEngine(model_size=MODEL_SIZE, device=DEVICE)
     clinical_filler = ClinicalFormFiller()
     audio = AudioRecorder(path=AUDIO_SAVE_PATH, rate=RATE, channels=CHANNELS)
-    engine_num = int(input("Escribe 1 si quieres el engine local, Escribe 2, si quieres un proveedor externo"))
+    engine_num = int(input("Escribe 1 si quieres el engine local, Escribe 2, si quieres un proveedor externo\n"))
     # value = input("Modelo Listo. \n Escribe [1] si va a ser live streaming. \n Escribe [2] si vas a grabar la sesion completa.\n").strip()
     value = str(input("Escribe 2 para grabar la sesion \nEscribe 3 para usar un audio pre grabado.\n"))
     wav_path = None
@@ -346,6 +346,6 @@ def prueba_llm():
 
 
 if __name__ == "__main__":
-    # main()
+    main()
     # prueba_llm()
-    main_external_engine()
+    # main_external_engine()
