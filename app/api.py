@@ -131,6 +131,56 @@ def process_transcript_with_regex_and_llm(llm_model, form_filler, transcript_ful
 
     return fields_final, missing_final
 
+ALLOWED_EXTS = {".wav", ".m4a", ".mp4"}   # agrega ".mp3" si lo soportas
+ALLOWED_CT = {
+    "audio/wav", "audio/x-wav",
+    "audio/mp4", "video/mp4",
+    "audio/m4a",  # a veces llega así
+    "application/octet-stream",  # permitir, pero validar por extensión/header
+}
+
+def _sniff_container(header: bytes) -> str | None:
+    # WAV: "RIFF" .... "WAVE"
+    if len(header) >= 12 and header[0:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "wav"
+    # MP4/M4A: 'ftyp' en bytes 4..8 típicamente
+    if len(header) >= 12 and header[4:8] == b"ftyp":
+        # puede ser isom/mp42/M4A/...
+        return "mp4"
+    return None
+
+async def validate_audio_upload(file: UploadFile) -> tuple[str, str]:
+    """
+    Devuelve (ext, detected_kind) y lanza ValueError con mensaje claro si no pasa.
+    """
+    filename = file.filename or ""
+    ext = Path(filename).suffix.lower()
+
+    if not filename:
+        raise ValueError("Archivo sin nombre (filename vacío).")
+
+    if ext not in ALLOWED_EXTS:
+        raise ValueError(f"Extensión no soportada: {ext}. Use: {', '.join(sorted(ALLOWED_EXTS))}")
+
+    ct = (file.content_type or "").lower().strip()
+
+    # Si el cliente manda un CT raro, no lo mates si la extensión es válida.
+    # Solo bloquea si es claramente algo ajeno.
+    if ct and ct not in ALLOWED_CT and not ct.startswith("audio/") and not ct.startswith("video/"):
+        raise ValueError(f"Content-Type no soportado: {ct}.")
+
+    # Sniff mínimo (lee y regresa el puntero)
+    header = await file.read(64)
+    await file.seek(0)
+
+    kind = _sniff_container(header)
+    if kind == "wav" and ext != ".wav":
+        # no es fatal, pero es inconsistente: o lo bloqueas o lo permites con warning
+        pass
+    if kind == "mp4" and ext not in {".m4a", ".mp4"}:
+        pass
+
+    return ext, (kind or "unknown")
 
 # -----------------Error Handling ---------------------
 logger = logging.getLogger("history_api")
@@ -157,7 +207,7 @@ async def history_api_error_request(request: Request, exc: HISTORYApiError):
         "HISTORYApiError",
         extra={
             "error_type": exc.type,
-            "message": exc.message,
+            "err_msg": exc.message,
             "detail": exc.detail,
             "context": exc.context,
             "path": str(request.url),
@@ -232,17 +282,11 @@ async def process_audio_session(
     session_id = str(uuid.uuid4().hex)[:4]  # Caben 65,536 requests
 
     # 0.5) Validar tipo de archivo
-    allowed_types = {
-        "audio/m4a",
-        "audio/mp4",
-        "audio/wav",
-    }
-    if file.content_type not in allowed_types:
-        raise HISTORYApiError(
-            status_code=415,
-            type="unsupported_media_type",
-            message=f"Formato no soportado: {file.content_type}. Use m4a, mp4, wav.",
-        )
+
+    try:
+        ext, kind = await validate_audio_upload(file)
+    except ValueError as e:
+        raise HISTORYApiError(str(e), status_code=415)
 
     # 1) Guardar audio temporalmente
     suffix = Path(file.filename).suffix or ".wav"
