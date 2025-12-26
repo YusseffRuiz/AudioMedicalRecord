@@ -14,7 +14,7 @@ REQUIRED_FIELDS = [
     "edad", "peso_kg", "talla_m", "ta_sis", "ta_dia",
     "fc_lpm", "fr_rpm", "spo2_pct", "temp_c", "gluc_mgdl", "alergias",
     # Posterior al llenado de signos, el flujo incluye:
-    "diagnostico", "receta"
+    "diagnostico", "receta", "sintomas"
 ]
 
 FIELD_META = {
@@ -68,6 +68,9 @@ FIELD_META = {
                     "desc": "tratamiento o receta indicada en pocas frases",
                     "example": "La receta indicada es ibuprofeno 400 mg cada 8 horas por 3 días.",
                    },
+    "sintomas":   {"label": "Sintomas",
+                   "desc": "sintomatologia vista en el paciente",
+                   "example": "Dolor de cabeza intenso."}
 }
 
 FIELD_LABELS = { ## Solo para mostrar en formato humano.
@@ -84,6 +87,7 @@ FIELD_LABELS = { ## Solo para mostrar en formato humano.
     "alergias": "Alergias",
     "diagnostico": "Diagnóstico",
     "receta": "Receta",
+    "sintomas": "Sintomas"
 }
 
 RANGES = {
@@ -188,15 +192,6 @@ class FieldCompleterEngine:
         if initial_prompt is not None:  # Se usa cuando se necesita crear un prompt inicial.
             self.initial_prompt = initial_prompt
 
-
-    def build_llama2_prompt(self, context: str) -> str:
-        # Plantilla oficial LLaMA-2 chat, uso basico para crear solo un prompt inicial
-        return (
-            f"[INST] <<SYS>>\n{self.initial_prompt}\n<</SYS>>\n\n"
-            f"# CONTEXTO\n{context}\n\n"
-            "# PREGUNTA\nExtrae los campos desde el contexto. Si no hay ninguno, devuelve {{}}.\n[/INST]"
-        )
-
     @staticmethod
     def _in_range(key: str, value) -> bool:
         # Verifica que los valores obtenidos si esten en rango real
@@ -205,6 +200,20 @@ class FieldCompleterEngine:
         lo, hi = RANGES[key]
         v = float(value)
         return lo <= v <= hi
+
+    def ask_llm(self, prompt, max_tokens=512):
+        try:
+            raw = self.llm_model(
+                prompt=prompt,
+                stop=["</s>"],
+                max_tokens=max_tokens,
+                echo=False,
+                stream=False
+            )
+            return raw["choices"][0]["text"].strip()
+        except Exception as e:
+            print("[LLM ERROR]", repr(e))
+            return []
 
 
     def _extract_from_chunk(self, chunk_text_str: str, missing_fields=None):
@@ -290,10 +299,14 @@ class FieldCompleterEngine:
 
         # 2) Instrucciones base (puedes ajustar para aligerar tokens si hace falta)
         sys_instructions = (
-            "Eres un extractor clínico estricto en español. "
+            "Eres un extractor clínico estricto en español y un asistente de diagnosticos. "
             "Tu tarea es ayudar a llenar un historial clínico a partir de la transcripción de una consulta. "
             "Solo te interesan los campos listados, y debes ser conservador: "
-            "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n\n"
+            "si un dato no aparece con claridad, no lo inventes ni lo infieras.\n"
+            "Tras llenar los campos esperados, realiza una lista con los síntomas que recibiste y produce un diagnóstico"
+            "diferencial (top 3), usando los síntomas descritos y tus conocimientos.\n"
+            "Después del diagnóstico diferencial, reporta una serie de recomendaciones para el día a día del paciente"
+            "para mejorar su salud con respecto al diagnóstico diferencial.\n\n"
             "Lista de CAMBIOS que debes reportar (solo los campos faltantes) y SOLAMENTE en el formato indicado:\n"
             f"{campos_descripcion}\n\n"
             "Reglas importantes:\n"
@@ -336,7 +349,7 @@ class FieldCompleterEngine:
             f"{transcript}\n"
             "# TAREA\n"
             f"Con base en el contexto clínico anterior, menciona únicamente la información clara "
-            f"relacionada con los siguientes campos faltantes: {campos_str}.\n"
+            f"relacionada con los siguientes campos faltantes: {campos_str}. Y propon un diagnostico diferencial\n"
             "[/INST]"
         )
         # print("Tokens: ", count_tokens(prompt))
@@ -360,7 +373,7 @@ class FieldCompleterMistral(FieldCompleterEngine):
         super().__init__(max_tokens_per_chunk, overlap_tokens, medical_filler, device)
         self.completion_args = {
             "temperature": 0.15,
-            "max_tokens": 4096,  # Uso aproximado maximo por sesion
+            "max_tokens": 512,  # Uso aproximado maximo por sesion
             "top_p": 1
         }
 
@@ -369,6 +382,30 @@ class FieldCompleterMistral(FieldCompleterEngine):
         print("Initializing Model ...")
         self.llm_model = Mistral(api_key=api_key)
         print("Module Created!")
+
+    def ask_llm(self, prompt, max_tokens=None):
+        inputs = [
+            {"role": "user", "content": f"{prompt}"}
+        ]
+        try:
+            raw = self.llm_model.chat.complete(
+                model="mistral-small-latest",
+                messages=inputs,
+                max_tokens=max_tokens or self.completion_args.get("max_tokens"),
+                temperature=self.completion_args["temperature"],
+                top_p=self.completion_args["top_p"],
+            )
+            # raw = self.llm_model.beta.conversations.start(
+            #     inputs=prompt,
+            #     model="mistral-small-latest",
+            #     instructions="""""",
+            #     completion_args=self.completion_args,
+            #     tools=[],
+            # )
+            return raw.choices[0].message.content
+        except Exception as e:
+            print("[LLM ERROR]", repr(e))
+            return []
 
     def _extract_from_chunk(self, chunk_text_str: str, missing_fields=None):
 
@@ -381,12 +418,12 @@ class FieldCompleterMistral(FieldCompleterEngine):
         ]
         while not success:
             try:
-                raw = self.llm_model.beta.conversations.start(
-                    inputs=inputs,
+                raw = self.llm_model.chat.complete(
                     model="mistral-small-latest",
-                    instructions="""""",
-                    completion_args=self.completion_args,
-                    tools=[],
+                    messages=inputs,
+                    max_tokens=self.completion_args.get("max_tokens"),
+                    temperature=self.completion_args["temperature"],
+                    top_p=self.completion_args["top_p"],
                 )
             except Exception as e:
                 print("[LLM ERROR]", repr(e))
@@ -397,7 +434,7 @@ class FieldCompleterMistral(FieldCompleterEngine):
                 success = True
                 print("LLM Failed")
         try:
-            raw = raw.outputs[0].content
+            raw = raw.choices[0].message.content
         except Exception as e:
             print(f"[ERROR] No se pudo extraer texto de la salida del modelo: {e}")
         # Habilitar para debugging
@@ -409,3 +446,12 @@ class FieldCompleterMistral(FieldCompleterEngine):
         lines = raw.strip().splitlines()
         for line in lines:
             self.medical_filler.update(line, reg_flag=False)
+
+
+def build_llama2_prompt(prompt, context: str, pregunta: str) -> str:
+    # Plantilla oficial LLaMA-2 chat, uso basico para crear solo un prompt inicial
+    return (
+        f"[INST] <<SYS>>\n{prompt}\n<</SYS>>\n\n"
+        f"# CONTEXTO\n{context}\n\n"
+        f"# PREGUNTA\n{pregunta}.\n[/INST]"
+    )

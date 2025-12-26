@@ -26,7 +26,7 @@ MODEL_SIZE = "medium"  # sube a "medium" si tu CPU lo permite
 # ---- VARIABLES MODELOS -----
 DEVICE = 'cuda'if torch.cuda.is_available() else 'cpu'
 # audio_file_path = "Audios/GrabacionPrueba_2.wav"
-audio_file_path = "Audios/Grabacion_Prueba_3min.m4a"
+audio_file_path = "Audios/GrabacionPrueba_diab.wav"
 LLM_MODEL = "../HF_Agents/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
 AUDIO_SAVE_PATH = "_full_sessions"
 
@@ -132,105 +132,6 @@ def capture_thread():
                 stop_flag.set()
                 break
             time.sleep(0.05)  # ceder CPU
-
-# def consumer_thread(model: whisper.Whisper):
-#     global pcm_buffer, last_emitted_time, TRANSCRIPT_LOG
-#     last_infer = 0.0
-#     t0 = time.time()
-#
-#     while not stop_flag.is_set():
-#         # Vaciar la cola en el buffer
-#         # drained = False
-#         try:
-#             chunk = audio_q.get(timeout=0.1)
-#             with buffer_lock:
-#                 pcm_buffer = np.concatenate([pcm_buffer, chunk])
-#                 # Mantener como máximo WINDOW_SEC en buffer (ventana deslizante)
-#                 max_samples = int(RATE * WINDOW_SEC)
-#                 if pcm_buffer.size > max_samples:
-#                     pcm_buffer = pcm_buffer[-max_samples:]
-#             # drained = True
-#         except queue.Empty:
-#             pass
-#
-#         elapsed = time.time() - t0
-#         if elapsed - last_infer >= INTERVAL_SEC:
-#             last_infer = elapsed
-#
-#             # Copiar snapshot del buffer para inferir sin bloquear captura
-#             with buffer_lock:
-#                 snap = pcm_buffer.copy()
-#
-#             if snap.size == 0:
-#                 # if not running_flag.is_set():  # ya se soltó la tecla y no queda nada
-#                 #     break
-#                 continue
-#
-#             # Convertir a float32 [-1,1]
-#             audio_f = snap.astype(np.float32) / 32767.0
-#
-#             # Transcribir con timestamps para filtrar duplicados
-#             # (sin timestamps también funciona, pero no sabríamos qué “nuevo” emitir)
-#             try:
-#                 _, _, result = model.transcribe_file(audio_f, language="es", without_timestamps=True)
-#             except Exception as e:
-#                 print(f"[WARN] Falló transcribir: {e}")
-#                 continue
-#
-#             segments: List[dict] = result.get("segments", [])
-#             new_text_parts = []
-#
-#             # Calcular la marca de tiempo de inicio del snapshot actual.
-#             # Como solo mantenemos WINDOW_SEC, el tiempo 0 del snapshot es "ahora - WINDOW_SEC".
-#             # Para comparar con last_emitted_time, mapeamos los tiempos relativos a absolutos:
-#             #  - t_abs_segment = (tiempo_total_transcurrido - duracion_snapshot) + seg['end']
-#             dur_snap = len(snap) / RATE
-#             base_time_abs = elapsed - dur_snap  # tiempo absoluto de inicio del snapshot
-#
-#             for seg in segments:
-#                 seg_end_abs = base_time_abs + float(seg.get("end", 0.0))
-#                 if seg_end_abs > last_emitted_time + 0.05:
-#                     new_text_parts.append(seg.get("text", ""))
-#
-#             if new_text_parts:
-#                 # Emitir texto nuevo y actualizar la marca
-#                 new_text = "".join(new_text_parts)
-#                 TRANSCRIPT_LOG.append(new_text)
-#                 print(new_text, flush=True)
-#                 changed = clinical_filler.update(new_text)
-#                 if changed:
-#                     # Muestra vista rápida del estado cuando algo cambia
-#                     print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True)
-#                 # Actualizamos last_emitted_time al fin del último segmento
-#                 if segments:
-#                     last_abs = base_time_abs + float(segments[-1].get("end", 0.0))
-#                     last_emitted_time = max(last_emitted_time, last_abs)
-#
-#     # Al terminar, si queda algo, intentamos una última pasada
-#     with buffer_lock:
-#         snap = pcm_buffer.copy()
-#     if snap.size:
-#         audio_f = snap.astype(np.float32) / 32767.0
-#         try:
-#             _, _, result = model.transcribe_file(audio_f, language="es", without_timestamps=False)
-#             segments = result.get("segments", [])
-#             dur_snap = len(snap) / RATE
-#             base_time_abs = (time.time() - (time.time() - dur_snap)) - dur_snap  # básicamente -dur_snap
-#             new_text_parts = []
-#             for seg in segments:
-#                 seg_end_abs = base_time_abs + float(seg.get("end", 0.0))
-#                 if seg_end_abs > last_emitted_time + 0.05:
-#                     new_text_parts.append(seg.get("text", ""))
-#             if new_text_parts:
-#                 new_text = "".join(new_text_parts)
-#                 TRANSCRIPT_LOG.append(new_text)
-#                 print(new_text, flush=True)
-#                 changed = clinical_filler.update(new_text)
-#                 if changed:
-#                     # Muestra vista rápida del estado cuando algo cambia
-#                     print("\n[FORM] ", clinical_filler.preview_text(), "\n", flush=True)
-#         except Exception:
-#             pass
 
 
 def record_full_session(rec_duration_sec: int = 15 * 60) -> str:

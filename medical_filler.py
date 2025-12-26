@@ -25,6 +25,7 @@ class ClinicalFields:
     # Flujo posterior
     diagnostico: Optional[str] = None
     receta: Optional[str] = None
+    sintomas: Optional[str] = None
 
 class ClinicalFormFiller:
     """
@@ -74,11 +75,15 @@ class ClinicalFormFiller:
         r"\b(?:alerg(?:ias?)?|al(?:e|é)rgico(?:a)?)\s*(?:a|:)?\s*[:\-]?\s*(?P<val>.+)$"
         , re.I)
     _re_diag = re.compile(
-        r"\b(?:diagn[oó]stico(?:\s+principal)?|impresi[oó]n\s+diagn[oó]stica)\s*[:\-]?\s*(?P<val>.+)$",
+        r"\b(?:diagn[oó]stico(?:\s)?|impresi[oó]n\s+diagn[oó]stica)\s*[:\-]?\s*(?P<val>.+)$",
         re.I
     )
     _re_receta = re.compile(
         r"\b(?:[Rr]eceta|[Mm]edicamento?:s)\s*[:\-]?\s*(?P<val>.+)$",
+        re.I
+    )
+    _re_sintomas = re.compile(
+        r'^\s*(?:[-*]\s*)?(?:"\s*)?(?:s[ií]ntomas?)\s*[:\-]\s*(?P<val>.+?)\s*(?:"\s*)?$',
         re.I
     )
     NO_CAND_RE = r"\b(no\s+se\s+especific[oó]|no\s+se\s+inform[oó]|no\s+se\s+menciona)\b"
@@ -213,6 +218,19 @@ class ClinicalFormFiller:
                     elif cand.lower() not in self.state.receta.lower():
                         self.state.receta = f"{self.state.receta}, {cand}"
                         changed["receta"] = self.state.receta
+
+            # sintomas
+            m = self._re_sintomas.search(s)
+            if m:
+                cand = m.group("val").strip(" .,-\"")
+                # Si ya hay algo, une de forma única
+                if cand and not re.search(self.NO_CAND_RE, cand, re.I):
+                    if not self.state.sintomas:
+                        self.state.sintomas = cand
+                        changed["sintomas"] = cand
+                    elif cand.lower() not in self.state.sintomas.lower():
+                        self.state.sintomas = f"{self.state.sintomas}, {cand}"
+                        changed["sintomas"] = self.state.sintomas
 
             # Alergias
             if self._re_alerg_none.search(s):
