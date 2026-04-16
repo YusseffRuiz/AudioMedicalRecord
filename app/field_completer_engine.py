@@ -2,6 +2,11 @@
 # - Separa el transcript en chunks ~800 tokens (configurable).
 # - Envía cada chunk a un LLM con un prompt de extracción JSON estricto.
 # - Valida rangos y fusiona resultados.
+
+"""
+En este archivo se deben hacer cambios con respecto a nuevos sensores o modificacion de valores regulares.
+
+"""
 import os
 from typing import List
 import tiktoken
